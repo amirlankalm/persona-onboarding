@@ -25,6 +25,7 @@ import {
   type OnboardingState,
   type TranscriptItem
 } from '@/lib/onboarding'
+import { playConnectTone, playEndCallTone, playIncomingRingTone } from '@/lib/audio'
 
 type VoiceStatus = 'idle' | 'connecting' | 'connected' | 'disconnecting' | 'listening' | 'speaking' | 'ended'
 
@@ -69,6 +70,24 @@ export function PersonaOnboarding() {
   const [callSeconds, setCallSeconds] = useState(0)
   const conversationRef = useRef<VoiceConversation | null>(null)
   const stateRef = useRef(state)
+  const messagesEndRef = useRef<HTMLDivElement | null>(null)
+
+  // Incoming call ringtone cue
+  useEffect(() => {
+    if (state.phase === 'ringing') {
+      const stopRing = playIncomingRingTone()
+      return () => {
+        stopRing()
+      }
+    }
+  }, [state.phase])
+
+  // Smooth auto-scroll for iMessage transcript
+  useEffect(() => {
+    if (state.channel === 'text') {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [state.transcript, state.channel, isSending, state.phase])
 
   useEffect(() => {
     const restored = readStoredState(window.localStorage.getItem(ONBOARDING_STORAGE_KEY))
@@ -132,6 +151,7 @@ export function PersonaOnboarding() {
 
   async function startVoice() {
     if (conversationRef.current || voiceStatus === 'connecting' || state.agentName.length === 0) return
+    playConnectTone()
     setNotice('')
     setVoiceStatus('connecting')
     dispatch({ type: 'choose-channel', channel: 'voice' })
@@ -199,6 +219,7 @@ export function PersonaOnboarding() {
   }
 
   async function endVoice() {
+    playEndCallTone()
     const conversation = conversationRef.current
     if (conversation) await conversation.endSession()
     conversationRef.current = null
@@ -372,7 +393,9 @@ export function PersonaOnboarding() {
               }}
               type="button"
             >
-              <span aria-hidden="true">×</span>
+              <span aria-hidden="true" className="decline-icon">
+                <Phone />
+              </span>
               <b>Decline</b>
             </button>
             <button className="circle-call-action accept" onClick={startVoice} type="button">
@@ -417,7 +440,7 @@ export function PersonaOnboarding() {
         {/* Live Audio Visualizer */}
         <div className="ios-call-wave-wrap" aria-label="Voice activity">
           <div className={`ios-call-waves ${voiceStatus === 'speaking' ? 'speaking' : 'listening'}`}>
-            {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+            {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
               <span key={i} className="ios-wave-bar" style={{ '--i': i } as CSSProperties} />
             ))}
           </div>
@@ -560,6 +583,17 @@ export function PersonaOnboarding() {
             )
           })
         )}
+
+        {isSending && (
+          <div className="imessage-bubble-row received">
+            <div className="imessage-bubble bubble-gray typing-indicator" aria-label={`${state.agentName} is typing`}>
+              <span className="typing-dot" />
+              <span className="typing-dot" />
+              <span className="typing-dot" />
+            </div>
+          </div>
+        )}
+        <div ref={messagesEndRef} />
       </section>
 
       {notice && <p className="notice-pill" role="status">{notice}</p>}
@@ -693,6 +727,14 @@ function GmailModal({
   onSave: (event: FormEvent<HTMLFormElement>) => void
   onSkip: () => void
 }) {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
+
   return (
     <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-gmail-title">
       <div className="modal-card">

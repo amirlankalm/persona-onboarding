@@ -202,6 +202,22 @@ input:focus-visible {
   height: 0.85rem;
 }
 
+/* Screen 1 & 2: Smooth Stage Transition */
+.naming-stage, .incoming-stage {
+  animation: stage-fade-in 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes stage-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
 /* Screen 2: Incoming Call */
 .incoming-stage {
   align-items: center;
@@ -209,19 +225,31 @@ input:focus-visible {
 }
 
 .caller-avatar {
-  width: 4.5rem;
-  height: 4.5rem;
+  width: 5rem;
+  height: 5rem;
   border-radius: 50%;
   background: var(--ink);
   color: var(--surface);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.85rem;
+  font-size: 2rem;
   font-weight: 600;
   letter-spacing: -0.04em;
   margin: 0 auto 1.5rem;
-  box-shadow: 0 0 0 5px rgba(0, 0, 0, 0.03);
+  animation: ring-pulse 2.4s infinite cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes ring-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(52, 199, 89, 0.45), 0 0 0 0 rgba(52, 199, 89, 0.2);
+  }
+  60% {
+    box-shadow: 0 0 0 16px rgba(52, 199, 89, 0), 0 0 0 32px rgba(52, 199, 89, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(52, 199, 89, 0), 0 0 0 0 rgba(52, 199, 89, 0);
+  }
 }
 
 .incoming-stage h1 {
@@ -274,23 +302,45 @@ input:focus-visible {
 }
 
 .circle-call-action:hover span {
-  transform: scale(1.04);
+  transform: scale(1.05);
 }
 
 .circle-call-action:active span {
-  transform: scale(0.96);
+  transform: scale(0.95);
 }
 
 .circle-call-action.decline span {
   background: #eb4d3d;
   box-shadow: 0 4px 16px rgba(235, 77, 61, 0.35);
-  font-size: 1.5rem;
-  line-height: 1;
+}
+
+.circle-call-action.decline .decline-icon {
+  transform: rotate(135deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 150ms var(--ease);
+}
+
+.circle-call-action.decline:hover .decline-icon {
+  transform: rotate(135deg) scale(1.05);
 }
 
 .circle-call-action.accept span {
   background: #34c759;
   box-shadow: 0 4px 16px rgba(52, 199, 89, 0.35);
+  animation: accept-pulse 2.2s infinite cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes accept-pulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 4px 16px rgba(52, 199, 89, 0.35);
+  }
+  50% {
+    transform: scale(1.06);
+    box-shadow: 0 6px 24px rgba(52, 199, 89, 0.55);
+  }
 }
 
 .circle-call-action span svg {
@@ -373,7 +423,7 @@ input:focus-visible {
 }
 
 .ios-wave-bar {
-  width: 3px;
+  width: 3.5px;
   background: #34c759;
   border-radius: 9999px;
   height: 20%;
@@ -381,14 +431,14 @@ input:focus-visible {
 }
 
 .ios-call-waves.speaking .ios-wave-bar {
-  animation: ios-wave-pulse 700ms ease-in-out infinite alternate;
-  animation-delay: calc(var(--i) * -100ms);
+  animation: ios-wave-pulse 650ms ease-in-out infinite alternate;
+  animation-delay: calc(var(--i) * -80ms);
 }
 
 .ios-call-waves.listening .ios-wave-bar {
   background: #8e8e93;
   animation: ios-wave-subtle 1.8s ease-in-out infinite alternate;
-  animation-delay: calc(var(--i) * -180ms);
+  animation-delay: calc(var(--i) * -140ms);
 }
 
 @keyframes ios-wave-pulse {
@@ -689,6 +739,39 @@ input:focus-visible {
   color: #8e8e93;
   margin-top: 0.2rem;
   padding-right: 0.35rem;
+}
+
+/* Apple 3-Dot Typing Indicator */
+.typing-indicator {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 5px;
+  padding: 0.75rem 1rem !important;
+  width: fit-content;
+  min-height: 2.15rem;
+}
+
+.typing-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #8e8e93;
+  animation: typing-dot-bounce 1.3s infinite ease-in-out both;
+}
+
+.typing-dot:nth-child(1) { animation-delay: -0.32s; }
+.typing-dot:nth-child(2) { animation-delay: -0.16s; }
+.typing-dot:nth-child(3) { animation-delay: 0s; }
+
+@keyframes typing-dot-bounce {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.35;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 /* iMessage Composer */
