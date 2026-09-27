@@ -60,6 +60,7 @@ IMPORTANT CONSTRAINTS:
 - Reply in 1–3 short sentences only
 - No lists, no bullet points, no markdown
 - No hollow filler ("Great!", "Sure!", "Of course!")
+- Never use em dashes (—). Use a comma, period, or just a space instead
 - If they joke around, play along briefly then get back on track
 - If they say they need nothing, acknowledge it, ask if they want to chill or if anything comes to mind later`
 }
@@ -114,8 +115,10 @@ async function callGroq(
     choices: Array<{ message: { content: string } }>
   }
 
-  const reply = data.choices[0]?.message?.content?.trim()
-  if (!reply) throw new Error('Empty response from Groq')
+  const raw = data.choices[0]?.message?.content?.trim()
+  if (!raw) throw new Error('Empty response from Groq')
+  // Hard safety: strip em dashes the model occasionally sneaks in
+  const reply = raw.replace(/\s*—\s*/g, ', ').replace(/—/g, ' ')
   return reply
 }
 

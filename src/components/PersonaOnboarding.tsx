@@ -74,8 +74,6 @@ export function PersonaOnboarding() {
   const [audioBlocked, setAudioBlocked] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [callSeconds, setCallSeconds] = useState(0)
-  const [liveSpeaker, setLiveSpeaker] = useState<'agent' | 'user' | null>(null)
-  const [liveSpeechText, setLiveSpeechText] = useState('')
   const conversationRef = useRef<VoiceConversation | null>(null)
   const stateRef = useRef(state)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
@@ -208,8 +206,6 @@ export function PersonaOnboarding() {
 
   function switchToText() {
     setVoiceStatus('idle')
-    setLiveSpeaker(null)
-    setLiveSpeechText('')
     dispatch({ type: 'choose-channel', channel: 'text' })
   }
 
@@ -274,8 +270,6 @@ export function PersonaOnboarding() {
           if (last) {
             const trimmed = last.text.trim()
             if (trimmed) {
-              setLiveSpeaker(last.source)
-              setLiveSpeechText(trimmed)
             }
           }
           messages.forEach((message, index) => {
@@ -331,8 +325,6 @@ export function PersonaOnboarding() {
 
   async function endVoice() {
     playEndCallTone()
-    setLiveSpeaker(null)
-    setLiveSpeechText('')
     const conversation = conversationRef.current
     conversationRef.current = null
     if (conversation) {
@@ -370,8 +362,6 @@ export function PersonaOnboarding() {
     }
     setVoiceStatus('idle')
     setCallSeconds(0)
-    setLiveSpeaker(null)
-    setLiveSpeechText('')
     setIsMuted(false)
     setNotice('')
     setAgentNameInput('')
@@ -700,28 +690,6 @@ export function PersonaOnboarding() {
               </div>
             </div>
 
-            {/* Live Subtitle Transcript / Apple-Style Live Captions */}
-            <div className="ios-call-subtitles" aria-live="polite">
-              <div className="ios-captions-header">
-                <span className="ios-captions-label">Live Captions</span>
-                <span className={`ios-live-dot ${voiceStatus === 'speaking' ? 'speaking' : 'listening'}`} />
-              </div>
-
-              {liveSpeechText ? (
-                <div className="ios-caption-bubble">
-                  <span className={`ios-caption-speaker ${liveSpeaker === 'user' ? 'user' : 'agent'}`}>
-                    {liveSpeaker === 'user' ? (state.userName.value || 'You') : state.agentName}:
-                  </span>
-                  <span className="ios-caption-content">
-                    “{liveSpeechText}”
-                  </span>
-                </div>
-              ) : (
-                <div className="ios-caption-idle">
-                  <span>{voiceStatus === 'connecting' ? 'connecting audio…' : 'listening to you…'}</span>
-                </div>
-              )}
-            </div>
 
             {notice && <p className="notice-pill ios-notice" role="status">{notice}</p>}
             {audioBlocked && (
