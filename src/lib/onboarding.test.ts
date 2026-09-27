@@ -222,5 +222,25 @@ describe('Persona onboarding 12 acceptance test cases', () => {
     expect(parseCandidates('Amirlan here').userName).toBe('Amirlan')
     expect(parseCandidates('call me Amir').userName).toBe('Amir')
   })
+
+  it('(15) transitioning from voice to text cleanly switches channel while retaining all confirmed slots and progress', () => {
+    let state = createInitialState()
+    state = onboardingReducer(state, { type: 'name-agent', value: 'Sol' })
+    state = onboardingReducer(state, { type: 'choose-channel', channel: 'voice' })
+    state = onboardingReducer(state, { type: 'set-user-name', value: 'Amirlan', status: 'confirmed' })
+    state = onboardingReducer(state, { type: 'set-gmail', address: 'amir@gmail.com', status: 'address_provided' })
+
+    expect(state.channel).toBe('voice')
+    expect(state.userName.value).toBe('Amirlan')
+    expect(state.gmail.address).toBe('amir@gmail.com')
+
+    // Switch to text
+    state = onboardingReducer(state, { type: 'choose-channel', channel: 'text' })
+    expect(state.channel).toBe('text')
+    expect(state.userName.value).toBe('Amirlan')
+    expect(state.userName.status).toBe('confirmed')
+    expect(state.gmail.address).toBe('amir@gmail.com')
+    expect(state.gmail.status).toBe('address_provided')
+  })
 })
 

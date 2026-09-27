@@ -130,6 +130,25 @@ export function PersonaOnboarding() {
     void conversationRef.current?.endSession()
   }, [])
 
+  // Absolute voice isolation: when channel is text, synchronize external WebRTC session and DOM audio
+  useEffect(() => {
+    if (state.channel === 'text') {
+      if (conversationRef.current) {
+        const active = conversationRef.current
+        conversationRef.current = null
+        void active.endSession().catch(() => {})
+      }
+      if (typeof document !== 'undefined') {
+        document.querySelectorAll('audio').forEach((el) => {
+          try {
+            el.pause()
+            el.srcObject = null
+          } catch {}
+        })
+      }
+    }
+  }, [state.channel])
+
   useEffect(() => {
     const isLive = state.channel === 'voice' && voiceStatus !== 'ended' && voiceStatus !== 'idle'
     if (!isLive) return
@@ -183,6 +202,13 @@ export function PersonaOnboarding() {
     dispatch({ type: 'name-agent', value: trimmed })
   }
 
+  function switchToText() {
+    setVoiceStatus('idle')
+    setLiveSpeaker(null)
+    setLiveSpeechText('')
+    dispatch({ type: 'choose-channel', channel: 'text' })
+  }
+
   function continueByText() {
     const trimmed = agentNameInput.trim()
     if (!trimmed) {
@@ -190,7 +216,7 @@ export function PersonaOnboarding() {
       return
     }
     dispatch({ type: 'name-agent', value: trimmed })
-    dispatch({ type: 'choose-channel', channel: 'text' })
+    switchToText()
   }
 
   async function startVoice() {
@@ -225,8 +251,8 @@ export function PersonaOnboarding() {
         transportUrl: session.transportUrl,
         onConnect: () => {
           setVoiceStatus('connected')
-          // Auto-resume audio immediately on connection
-          void conversation.startAudioPlayback().catch(() => {})
+          // Auto-resume audio immediately on connection (safe ref access to avoid TDZ ReferenceError)
+          void conversationRef.current?.startAudioPlayback().catch(() => {})
         },
         onDisconnect: () => {
           conversationRef.current = null
@@ -268,11 +294,31 @@ export function PersonaOnboarding() {
         onAudioPlaybackBlocked: () => setAudioBlocked(true),
         onError: () => setNotice('Voice connection paused. You can try again or continue by text.')
       })
+
+      // If user switched away to text while connection was being established, end immediately
+      if (stateRef.current.channel === 'text') {
+        void conversation.endSession().catch(() => {})
+        return
+      }
+
       conversationRef.current = conversation
       // Proactively trigger startAudioPlayback in case tracks were mounted
       void conversation.startAudioPlayback().catch(() => {})
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'Microphone connection did not start.'
+      if (conversationRef.current) {
+        const conv = conversationRef.current
+        conversationRef.current = null
+        void conv.endSession().catch(() => {})
+      }
+      if (typeof document !== 'undefined') {
+        document.querySelectorAll('audio').forEach((el) => {
+          try {
+            el.pause()
+            el.srcObject = null
+          } catch {}
+        })
+      }
       setVoiceStatus('idle')
       dispatch({ type: 'choose-channel', channel: 'text' })
       setNotice(`${reason} Continuing by text.`)
@@ -284,8 +330,18 @@ export function PersonaOnboarding() {
     setLiveSpeaker(null)
     setLiveSpeechText('')
     const conversation = conversationRef.current
-    if (conversation) await conversation.endSession()
     conversationRef.current = null
+    if (conversation) {
+      await conversation.endSession().catch(() => {})
+    }
+    if (typeof document !== 'undefined') {
+      document.querySelectorAll('audio').forEach((el) => {
+        try {
+          el.pause()
+          el.srcObject = null
+        } catch {}
+      })
+    }
     setVoiceStatus('ended')
     setIsMuted(false)
     dispatch({ type: 'choose-channel', channel: 'text' })
@@ -293,8 +349,17 @@ export function PersonaOnboarding() {
 
   async function resetAll() {
     if (conversationRef.current) {
-      await conversationRef.current.endSession()
+      const conv = conversationRef.current
       conversationRef.current = null
+      await conv.endSession().catch(() => {})
+    }
+    if (typeof document !== 'undefined') {
+      document.querySelectorAll('audio').forEach((el) => {
+        try {
+          el.pause()
+          el.srcObject = null
+        } catch {}
+      })
     }
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem(ONBOARDING_STORAGE_KEY)
@@ -369,7 +434,7 @@ export function PersonaOnboarding() {
     applyCandidates(message)
 
     try {
-      if (conversationRef.current?.isOpen()) {
+      if (state.channel === 'voice' && conversationRef.current?.isOpen()) {
         await conversationRef.current.sendChatMessage(message)
       } else {
         const textFetchPromise = fetch('/api/text', {
@@ -483,7 +548,7 @@ export function PersonaOnboarding() {
             <div className="ios-incoming-row">
               <button
                 className="ios-call-round-btn"
-                onClick={() => dispatch({ type: 'choose-channel', channel: 'text' })}
+                onClick={switchToText}
                 type="button"
                 aria-label="Message"
               >
@@ -510,7 +575,7 @@ export function PersonaOnboarding() {
             <div className="ios-incoming-row actions-row">
               <button
                 className="ios-call-round-btn"
-                onClick={() => dispatch({ type: 'choose-channel', channel: 'text' })}
+                onClick={switchToText}
                 type="button"
                 aria-label="Decline call and continue by text"
               >
