@@ -55,7 +55,7 @@ export async function POST(request: Request) {
   if (!response.ok || !body) {
     console.error('Speko session mint failed', { status: response.status })
     return NextResponse.json(
-      { error: 'The voice room could not start. Your progress is safe—continue by text or try the call again.' },
+      { error: 'The voice room could not start. Your progress is safe. Continue by text or try the call again.' },
       { status: 502 }
     )
   }

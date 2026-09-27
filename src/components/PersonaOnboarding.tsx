@@ -770,7 +770,7 @@ export function PersonaOnboarding() {
             <button
               className="ios-call-round-btn"
               type="button"
-              onClick={() => setNotice('Voice active — speak naturally.')}
+              onClick={() => setNotice('Voice active. Speak naturally.')}
               aria-label="Keypad"
             >
               <div className="ios-round-circle util">
@@ -975,7 +975,7 @@ function GraduationCard({
       <div className="slot-recap">
         <div className="recap-item">
           <span>Name</span>
-          <strong>{state.userName.value || (state.userName.status === 'skipped' ? 'Skipped' : '—')}</strong>
+          <strong>{state.userName.value || (state.userName.status === 'skipped' ? 'Skipped' : 'Not provided')}</strong>
         </div>
         <div className="recap-item">
           <span>Gmail</span>
@@ -984,12 +984,12 @@ function GraduationCard({
               ? `${state.gmail.address} (Demo address)`
               : state.gmail.status === 'skipped'
               ? 'Skipped'
-              : '—'}
+              : 'Not provided'}
           </strong>
         </div>
         <div className="recap-item">
           <span>Task</span>
-          <strong>{state.task.value || '—'}</strong>
+          <strong>{state.task.value || 'Not provided'}</strong>
         </div>
       </div>
 

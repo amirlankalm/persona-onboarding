@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Persona — first contact',
+  title: 'Persona | First Contact',
   description: 'Meet the personal assistant you just named.'
 }
 

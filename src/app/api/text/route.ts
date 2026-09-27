@@ -12,7 +12,7 @@ const requestSchema = z.object({
   transcript: z.array(z.object({
     source: z.enum(['user', 'agent']),
     text: z.string()
-  })).max(30).optional(),
+  })).max(100).optional(),
   phase: z.enum(['naming', 'ringing', 'collecting', 'graduated']).optional()
 })
 
