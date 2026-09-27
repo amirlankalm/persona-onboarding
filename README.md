@@ -1,8 +1,6 @@
 # persona-onboarding
 
-Demo of a personal AI's first conversation. The user names the agent, gets a simulated incoming call, and — over voice or text — shares their name, Gmail, and one thing they need help with.
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/amirlankalm/persona-onboarding)
+Demo of a personal AI's first conversation. The user names the agent, gets a simulated incoming call, and - over voice or text - shares their name, Gmail, and one thing they need help with.
 
 ---
 
@@ -12,9 +10,9 @@ The user lands on a blank screen. Their agent has no name yet. They type one, a 
 
 From there:
 
-- **Accept** — live WebRTC call via Speko. The agent collects name, Gmail, and a task in whatever order the user gives them.
-- **Decline / hang up / mic denied** — drops into an iMessage-style chat that picks up exactly where the call left off. Same transcript, same slots.
-- **Refresh mid-flow** — state rehydrates from localStorage. Nothing is lost.
+- **Accept**: live WebRTC call via Speko. The agent collects name, Gmail, and a task in whatever order the user gives them.
+- **Decline / hang up / mic denied**: drops into an iMessage-style chat that picks up exactly where the call left off. Same transcript, same slots.
+- **Refresh mid-flow**: state rehydrates from localStorage. Nothing is lost.
 
 When the agent has enough to go on, it surfaces a proposed first step and lets the conversation continue below it.
 
@@ -115,13 +113,13 @@ Update the Speko webhook URL to `https://your-domain.vercel.app/api/speko/tools`
 ## Tests
 
 ```bash
-npm test          # 23 tests (Vitest)
+npm test          # 35 tests (Vitest)
 npm run typecheck
 npm run lint
 npm run build
 ```
 
-Covers: normal flow, one-breath multi-slot utterances, hang-up recovery, mic denial, localStorage hydration, refusals, task-before-name ordering, ambiguous email correction, noise/off-topic input, idempotent reconnect, channel transitions, and ReDoS/hostile input stress tests.
+Covers: normal flow, one-breath multi-slot utterances, hang-up recovery, mic denial, localStorage hydration, refusals, task-before-name ordering, ambiguous email correction, noise/off-topic input, idempotent reconnect, channel transitions, 10 multi-turn simulated dialogues, and ReDoS/hostile input stress tests.
 
 ---
 
@@ -133,7 +131,7 @@ Covers: normal flow, one-breath multi-slot utterances, hang-up recovery, mic den
 
 ## Stack
 
-Next.js 16 (Turbopack), React 19, TypeScript, Vitest. Voice via `@spekoai/client`. Text via Groq (LLaMA 3.3 70B) with a multi-provider fallback chain. Web Audio API for all sound effects — no audio files.
+Next.js 16 (Turbopack), React 19, TypeScript, Vitest. Voice via `@spekoai/client`. Text via Groq (LLaMA 3.3 70B) with a multi-provider fallback chain. Web Audio API for all sound effects, no audio files.
 
 ---
 
