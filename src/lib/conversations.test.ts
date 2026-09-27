@@ -96,79 +96,75 @@ async function simulateTurn({
 describe('Simulated Multi-Turn Conversation Breakage & Integrity Tests', () => {
   it('Scenario 1: Happy Path Casual Chat with Spoken Email and Inbox Task', async () => {
     let transcript: Message[] = []
-    let name: string | undefined
-    let task: string | undefined
-    let gmail = 'empty'
+    let userGmail = 'empty'
 
     // Turn 1: User introduces themselves casually
-    let turn = await simulateTurn({
+    const turn1 = await simulateTurn({
       userMessage: "Hey! I'm Sarah",
       transcript,
-      knownUserName: name,
-      knownTask: task,
-      gmailStatus: gmail
+      knownUserName: undefined,
+      knownTask: undefined,
+      gmailStatus: userGmail
     })
-    expect(turn.effectiveName).toBe('Sarah')
-    expect(turn.reply.toLowerCase()).toContain('sarah')
-    transcript = turn.updatedTranscript
-    name = turn.effectiveName
+    expect(turn1.effectiveName).toBe('Sarah')
+    expect(turn1.reply.toLowerCase()).toContain('sarah')
+    transcript = turn1.updatedTranscript
+    const userName = turn1.effectiveName
 
     // Turn 2: User provides spoken email
-    turn = await simulateTurn({
+    const turn2 = await simulateTurn({
       userMessage: 'sarah dot dev at gmail dot com',
       transcript,
-      knownUserName: name,
-      knownTask: task,
-      gmailStatus: gmail
+      knownUserName: userName,
+      knownTask: undefined,
+      gmailStatus: userGmail
     })
-    expect(turn.effectiveGmail).toBe('address_provided')
-    transcript = turn.updatedTranscript
-    gmail = turn.effectiveGmail
+    expect(turn2.effectiveGmail).toBe('address_provided')
+    transcript = turn2.updatedTranscript
+    userGmail = turn2.effectiveGmail
 
     // Turn 3: User sets a task
-    turn = await simulateTurn({
+    const turn3 = await simulateTurn({
       userMessage: 'sort out my email and declutter newsletters',
       transcript,
-      knownUserName: name,
-      knownTask: task,
-      gmailStatus: gmail
+      knownUserName: userName,
+      knownTask: undefined,
+      gmailStatus: userGmail
     })
-    expect(turn.effectiveTask).toBeDefined()
-    transcript = turn.updatedTranscript
-    task = turn.effectiveTask
+    expect(turn3.effectiveTask).toBeDefined()
+    transcript = turn3.updatedTranscript
+    const userTask = turn3.effectiveTask
 
     // Turn 4: User asks for name verification
-    turn = await simulateTurn({
+    const turn4 = await simulateTurn({
       userMessage: 'whtas my name btw?',
       transcript,
-      knownUserName: name,
-      knownTask: task,
-      gmailStatus: gmail
+      knownUserName: userName,
+      knownTask: userTask,
+      gmailStatus: userGmail
     })
-    expect(turn.reply.toLowerCase()).toContain('sarah')
-    expect(turn.reply.toLowerCase()).not.toContain('what should i call you')
+    expect(turn4.reply.toLowerCase()).toContain('sarah')
+    expect(turn4.reply.toLowerCase()).not.toContain('what should i call you')
   })
 
   it('Scenario 2: The User Bug Flow (Talking to John -> email link -> Sort out email -> whtas my name -> u dont know my name -> hey)', async () => {
     let transcript: Message[] = [
       { source: 'agent', text: "hey, i'm persona. you just gave me a name a few seconds ago. who am i speaking with?" }
     ]
-    let name: string | undefined
-    let task: string | undefined
     let gmail = 'empty'
 
     // Turn 1: "Talking to John."
     let turn = await simulateTurn({
       userMessage: 'Talking to John.',
       transcript,
-      knownUserName: name,
-      knownTask: task,
+      knownUserName: undefined,
+      knownTask: undefined,
       gmailStatus: gmail
     })
     expect(turn.effectiveName).toBe('John')
     expect(turn.reply.toLowerCase()).toContain('john')
     transcript = turn.updatedTranscript
-    name = turn.effectiveName
+    const currentName = turn.effectiveName
 
     // Simulate clicking the UI Google Link modal (which adds to transcript and marks address_provided)
     gmail = 'address_provided'
@@ -181,20 +177,20 @@ describe('Simulated Multi-Turn Conversation Breakage & Integrity Tests', () => {
     turn = await simulateTurn({
       userMessage: 'Sort out my email.',
       transcript,
-      knownUserName: name,
-      knownTask: task,
+      knownUserName: currentName,
+      knownTask: undefined,
       gmailStatus: gmail
     })
     expect(turn.effectiveTask).toBeDefined()
     transcript = turn.updatedTranscript
-    task = turn.effectiveTask
+    const currentTask = turn.effectiveTask
 
     // Turn 3: "Are you already connected it?"
     turn = await simulateTurn({
       userMessage: 'Are you already connected it?',
       transcript,
-      knownUserName: name,
-      knownTask: task,
+      knownUserName: currentName,
+      knownTask: currentTask,
       gmailStatus: gmail
     })
     transcript = turn.updatedTranscript
@@ -203,8 +199,8 @@ describe('Simulated Multi-Turn Conversation Breakage & Integrity Tests', () => {
     turn = await simulateTurn({
       userMessage: 'whtas my name btw?',
       transcript,
-      knownUserName: name,
-      knownTask: task,
+      knownUserName: currentName,
+      knownTask: currentTask,
       gmailStatus: gmail
     })
     expect(turn.reply.toLowerCase()).toContain('john')
@@ -215,8 +211,8 @@ describe('Simulated Multi-Turn Conversation Breakage & Integrity Tests', () => {
     turn = await simulateTurn({
       userMessage: 'u dont know my name',
       transcript,
-      knownUserName: name,
-      knownTask: task,
+      knownUserName: currentName,
+      knownTask: currentTask,
       gmailStatus: gmail
     })
     expect(turn.reply.toLowerCase()).toContain('john')
@@ -227,8 +223,8 @@ describe('Simulated Multi-Turn Conversation Breakage & Integrity Tests', () => {
     turn = await simulateTurn({
       userMessage: 'hey',
       transcript,
-      knownUserName: name,
-      knownTask: task,
+      knownUserName: currentName,
+      knownTask: currentTask,
       gmailStatus: gmail
     })
     expect(turn.reply.toLowerCase()).toContain('john')
@@ -237,40 +233,40 @@ describe('Simulated Multi-Turn Conversation Breakage & Integrity Tests', () => {
 
   it('Scenario 3: Name Correction & Refusal Flow', async () => {
     let transcript: Message[] = []
-    let name: string | undefined
-    let task: string | undefined
+    let currentName: string | undefined
+    const currentTask: string | undefined = undefined
     let gmail = 'empty'
 
     // Turn 1: User says Mike
     let turn = await simulateTurn({
       userMessage: 'My name is Mike',
       transcript,
-      knownUserName: name,
-      knownTask: task,
+      knownUserName: currentName,
+      knownTask: currentTask,
       gmailStatus: gmail
     })
     expect(turn.effectiveName).toBe('Mike')
     transcript = turn.updatedTranscript
-    name = turn.effectiveName
+    currentName = turn.effectiveName
 
     // Turn 2: User corrects name
     turn = await simulateTurn({
       userMessage: "actually it's Michael",
       transcript,
-      knownUserName: name,
-      knownTask: task,
+      knownUserName: currentName,
+      knownTask: currentTask,
       gmailStatus: gmail
     })
     expect(turn.effectiveName).toBe('Michael')
     transcript = turn.updatedTranscript
-    name = turn.effectiveName
+    currentName = turn.effectiveName
 
     // Turn 3: User skips Gmail
     turn = await simulateTurn({
       userMessage: 'no thanks, skip gmail for now',
       transcript,
-      knownUserName: name,
-      knownTask: task,
+      knownUserName: currentName,
+      knownTask: currentTask,
       gmailStatus: gmail
     })
     expect(turn.effectiveGmail).toBe('skipped')
@@ -281,8 +277,8 @@ describe('Simulated Multi-Turn Conversation Breakage & Integrity Tests', () => {
     turn = await simulateTurn({
       userMessage: 'who am i?',
       transcript,
-      knownUserName: name,
-      knownTask: task,
+      knownUserName: currentName,
+      knownTask: currentTask,
       gmailStatus: gmail
     })
     expect(turn.reply.toLowerCase()).toContain('michael')
@@ -290,28 +286,26 @@ describe('Simulated Multi-Turn Conversation Breakage & Integrity Tests', () => {
 
   it('Scenario 4: Task Given First, Followed by Conversational Chatter and Name', async () => {
     let transcript: Message[] = []
-    let name: string | undefined
-    let task: string | undefined
-    let gmail = 'empty'
+    const gmail = 'empty'
 
     // Turn 1: User specifies task without giving name
     let turn = await simulateTurn({
       userMessage: 'book me a flight to New York next month',
       transcript,
-      knownUserName: name,
-      knownTask: task,
+      knownUserName: undefined,
+      knownTask: undefined,
       gmailStatus: gmail
     })
     expect(turn.effectiveTask).toBe('book me a flight to New York next month')
     transcript = turn.updatedTranscript
-    task = turn.effectiveTask
+    const currentTask = turn.effectiveTask
 
     // Turn 2: User asks off-topic question
     turn = await simulateTurn({
       userMessage: 'how are you today?',
       transcript,
-      knownUserName: name,
-      knownTask: task,
+      knownUserName: undefined,
+      knownTask: currentTask,
       gmailStatus: gmail
     })
     transcript = turn.updatedTranscript
@@ -320,27 +314,27 @@ describe('Simulated Multi-Turn Conversation Breakage & Integrity Tests', () => {
     turn = await simulateTurn({
       userMessage: 'you can call me Maya',
       transcript,
-      knownUserName: name,
-      knownTask: task,
+      knownUserName: undefined,
+      knownTask: currentTask,
       gmailStatus: gmail
     })
     expect(turn.effectiveName).toBe('Maya')
     transcript = turn.updatedTranscript
-    name = turn.effectiveName
+    const currentName = turn.effectiveName
 
     // Turn 4: User asks about their task
     turn = await simulateTurn({
       userMessage: 'what is my task?',
       transcript,
-      knownUserName: name,
-      knownTask: task,
+      knownUserName: currentName,
+      knownTask: currentTask,
       gmailStatus: gmail
     })
     expect(turn.reply.toLowerCase()).toContain('flight')
   })
 
   it('Scenario 5: Hostile Inbox Action Requests (Must decline directly doing inbox mutations)', async () => {
-    let transcript: Message[] = []
+    const transcript: Message[] = []
     const turn = await simulateTurn({
       userMessage: 'can you delete all emails in my gmail?',
       transcript,

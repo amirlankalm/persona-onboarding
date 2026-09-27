@@ -102,7 +102,7 @@ STRICT RULES:
 - No bullet points, lists, or markdown.
 - No canned AI filler ("Sure!", "Of course!", "How can I assist you?", "Love that energy", "haha. anyway").
 - Never claim you sent an email, booked a flight, or accessed an external service you haven't accessed.
-- If Gmail is already provided or skipped, DO NOT mention Gmail or ask about it again.
+- If Gmail is already provided or skipped, DO NOT mention Gmail, ask about it, or tell the user to tap the Google button again. If the user asks whether Gmail is connected, clarify that their address is noted for this demo, but real inbox access requires full OAuth in production.
 - If the user gave a task, acknowledge it and reference the proposed first step on screen.
 - If the user asks about the conversation, switches from a call, or complains, react like a real human: apologize simply and adapt immediately.`
 }
@@ -383,6 +383,17 @@ function intelligentFallback({
   if (/\b(?:clear|clean|delete|empty|organize|triage|wipe)\s+(?:my\s+)?(?:gmail|inbox|emails|mail)\b/i.test(lower) || /\bcan you\s+(?:clear|clean|delete|access)\b/i.test(lower)) {
     const prefix = knownUserName ? `${knownUserName}, ` : ''
     return cleanReply(`${prefix}i can't directly delete or access your inbox, but i've sketched a proposed inbox pass on screen. take a look whenever you're ready!`)
+  }
+
+  // 3b. User asks if Gmail or services are connected ("are you already connected it?", "is it connected", "did you connect gmail")
+  if (/\b(?:are\s+(?:you|we)\s+(?:already\s+)?connected|is\s+(?:it|gmail)\s+connected|did\s+you\s+connect\s+(?:it|gmail)|connected\s+it)\b/i.test(lower)) {
+    if (gmailStatus === 'connected') {
+      return cleanReply('yes, your Gmail is connected via OAuth!')
+    }
+    if (gmailStatus === 'address_provided') {
+      return cleanReply("you gave me your Gmail address for this demo, but real inbox access isn't connected without OAuth. what should we tackle next?")
+    }
+    return cleanReply("not connected yet. you can tap the Google button on screen whenever you want to add an address, or we can skip it.")
   }
 
   // 4. User mentions call state ("you're on a no call", "you're on mute")
