@@ -73,6 +73,8 @@ export function PersonaOnboarding() {
   const [audioBlocked, setAudioBlocked] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [callSeconds, setCallSeconds] = useState(0)
+  const [liveSpeaker, setLiveSpeaker] = useState<'agent' | 'user' | null>(null)
+  const [liveSpeechText, setLiveSpeechText] = useState('')
   const conversationRef = useRef<VoiceConversation | null>(null)
   const stateRef = useRef(state)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
@@ -208,18 +210,29 @@ export function PersonaOnboarding() {
         },
         onModeChange: (mode) => setVoiceStatus(mode),
         onTranscript: (messages) => {
+          if (!messages || messages.length === 0) return
+          const last = messages[messages.length - 1]
+          if (last) {
+            const trimmed = last.text.trim()
+            if (trimmed) {
+              setLiveSpeaker(last.source)
+              setLiveSpeechText(trimmed)
+            }
+          }
           messages.forEach((message, index) => {
-            const trimmed = message.text.trim()
-            if (!trimmed) return
-            append(dispatch, {
-              id: message.segmentId ?? `${message.source}-${message.startedAt ?? index}-${trimmed}`,
-              source: message.source,
-              text: trimmed,
-              final: message.isFinal,
-              createdAt: message.startedAt ?? Date.now()
-            })
-            if (message.source === 'user' && message.isFinal) {
-              applyCandidates(trimmed)
+            if (message.isFinal) {
+              const trimmed = message.text.trim()
+              if (!trimmed) return
+              append(dispatch, {
+                id: message.segmentId ?? `${message.source}-${message.startedAt ?? index}`,
+                source: message.source,
+                text: trimmed,
+                final: true,
+                createdAt: message.startedAt ?? Date.now()
+              })
+              if (message.source === 'user') {
+                applyCandidates(trimmed)
+              }
             }
           })
         },
@@ -237,6 +250,8 @@ export function PersonaOnboarding() {
 
   async function endVoice() {
     playEndCallTone()
+    setLiveSpeaker(null)
+    setLiveSpeechText('')
     const conversation = conversationRef.current
     if (conversation) await conversation.endSession()
     conversationRef.current = null
@@ -254,6 +269,8 @@ export function PersonaOnboarding() {
       window.localStorage.removeItem(ONBOARDING_STORAGE_KEY)
     }
     setVoiceStatus('idle')
+    setLiveSpeaker(null)
+    setLiveSpeechText('')
     setIsMuted(false)
     setNotice('')
     setAgentNameInput('')
@@ -465,9 +482,6 @@ export function PersonaOnboarding() {
 
   // SCREEN 3: ACTIVE iOS PHONE CALL
   if (state.channel === 'voice' && voiceStatus !== 'ended') {
-    const latestAgentSpeech = [...state.transcript].reverse().find((t) => t.source === 'agent')?.text
-    const latestUserSpeech = [...state.transcript].reverse().find((t) => t.source === 'user')?.text
-
     return (
       <div className="ios-screen-backdrop">
         <main className="ios-call-screen" id="main-content">
@@ -485,6 +499,78 @@ export function PersonaOnboarding() {
             </p>
           </div>
 
+          {/* Smooth In-Call Gmail Connector Banner */}
+          <div className="ios-call-gmail-wrap">
+            {state.gmail.status === 'empty' || state.gmail.status === 'candidate' ? (
+              <div className="ios-call-gmail-card" onClick={() => setIsGmailOpen(true)} role="button" tabIndex={0}>
+                <div className="ios-call-gmail-left">
+                  <div className="ios-call-gmail-badge">
+                    <GoogleIcon />
+                  </div>
+                  <div className="ios-call-gmail-info">
+                    <span className="ios-call-gmail-title">Connect Google Account</span>
+                    <span className="ios-call-gmail-desc">Link Gmail for this demo</span>
+                  </div>
+                </div>
+                <div className="ios-call-gmail-right">
+                  <button
+                    className="ios-call-gmail-btn"
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setIsGmailOpen(true)
+                    }}
+                  >
+                    Connect
+                  </button>
+                  <button
+                    className="ios-call-gmail-skip"
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      dispatch({ type: 'skip', slot: 'gmail' })
+                    }}
+                    title="Skip for now"
+                    aria-label="Skip Gmail"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            ) : state.gmail.status === 'address_provided' || state.gmail.status === 'connected' ? (
+              <div className="ios-call-gmail-card connected" onClick={() => setIsGmailOpen(true)} role="button" tabIndex={0}>
+                <div className="ios-call-gmail-left">
+                  <div className="ios-call-gmail-badge success">
+                    <CheckIcon />
+                  </div>
+                  <div className="ios-call-gmail-info">
+                    <span className="ios-call-gmail-title">{state.gmail.address}</span>
+                    <span className="ios-call-gmail-desc">Google Account Linked</span>
+                  </div>
+                </div>
+                <button
+                  className="ios-call-gmail-change-btn"
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setIsGmailOpen(true)
+                  }}
+                >
+                  Change
+                </button>
+              </div>
+            ) : (
+              <button
+                className="ios-call-gmail-skipped-pill"
+                type="button"
+                onClick={() => setIsGmailOpen(true)}
+              >
+                <GoogleIcon />
+                <span>Link Gmail (Optional)</span>
+              </button>
+            )}
+          </div>
+
           {/* Live Audio Visualizer */}
           <div className="ios-call-wave-wrap" aria-label="Voice activity">
             <div className={`ios-call-waves ${voiceStatus === 'speaking' ? 'speaking' : 'listening'}`}>
@@ -494,20 +580,26 @@ export function PersonaOnboarding() {
             </div>
           </div>
 
-          {/* Live Subtitle Transcript */}
+          {/* Live Subtitle Transcript / Apple-Style Live Captions */}
           <div className="ios-call-subtitles" aria-live="polite">
-            {latestAgentSpeech ? (
-              <p className="ios-subtitle-line agent">
-                <span>{latestAgentSpeech}</span>
-              </p>
-            ) : latestUserSpeech && voiceStatus !== 'speaking' ? (
-              <p className="ios-subtitle-line user">
-                <span>{latestUserSpeech}</span>
-              </p>
+            <div className="ios-captions-header">
+              <span className="ios-captions-label">Live Captions</span>
+              <span className={`ios-live-dot ${voiceStatus === 'speaking' ? 'speaking' : 'listening'}`} />
+            </div>
+
+            {liveSpeechText ? (
+              <div className="ios-caption-bubble">
+                <span className={`ios-caption-speaker ${liveSpeaker === 'user' ? 'user' : 'agent'}`}>
+                  {liveSpeaker === 'user' ? (state.userName.value || 'You') : state.agentName}:
+                </span>
+                <span className="ios-caption-content">
+                  “{liveSpeechText}”
+                </span>
+              </div>
             ) : (
-              <p className="ios-subtitle-line placeholder">
-                <span>{voiceStatus === 'connecting' ? 'setting up line…' : 'listening to you…'}</span>
-              </p>
+              <div className="ios-caption-idle">
+                <span>{voiceStatus === 'connecting' ? 'connecting audio…' : 'listening to you…'}</span>
+              </div>
             )}
           </div>
 
@@ -594,6 +686,22 @@ export function PersonaOnboarding() {
               <Phone />
             </button>
           </div>
+
+          {/* In-Call Google OAuth Modal */}
+          {isGmailOpen && (
+            <GoogleOAuthModal
+              userName={state.userName.value}
+              onClose={() => setIsGmailOpen(false)}
+              onSelectAccount={(email) => {
+                handleSelectGoogleAccount(email)
+                setIsGmailOpen(false)
+              }}
+              onSkip={() => {
+                dispatch({ type: 'skip', slot: 'gmail' })
+                setIsGmailOpen(false)
+              }}
+            />
+          )}
         </main>
       </div>
     )
@@ -1071,6 +1179,14 @@ function Plus() {
     <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
       <line x1="12" y1="5" x2="12" y2="19" />
       <line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  )
+}
+
+function CheckIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
     </svg>
   )
 }

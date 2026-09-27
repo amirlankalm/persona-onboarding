@@ -214,5 +214,13 @@ describe('Persona onboarding 12 acceptance test cases', () => {
     expect(resetState.userName.value).toBe('')
     expect(resetState.transcript).toHaveLength(0)
   })
+
+  it('(14) robustly parses spoken and informal user name formats', () => {
+    expect(parseCandidates('amirlan').userName).toBe('Amirlan')
+    expect(parseCandidates("it's amirlan").userName).toBe('Amirlan')
+    expect(parseCandidates('this is Amirlan').userName).toBe('Amirlan')
+    expect(parseCandidates('Amirlan here').userName).toBe('Amirlan')
+    expect(parseCandidates('call me Amir').userName).toBe('Amir')
+  })
 })
 

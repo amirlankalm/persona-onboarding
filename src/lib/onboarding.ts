@@ -216,21 +216,33 @@ export function parseCandidates(message: string): { userName?: string; gmail?: s
   const isNegativeCall = /(?:can't|cannot|don't|dont|won't|wont|not)\s+(?:call me|call)\b/i.test(normalized)
 
   if (!isNegativeCall) {
-    const nameIntroMatch = normalized.match(/(?:my name is|i am|i'm|im|call me(?!\s+(?:on|later|back|at|if|when|up|tomorrow)))\s+([a-zA-Z][a-zA-Z' -]{0,46})/i)
+    const nameIntroMatch = normalized.match(/(?:my name is|i am|i'm|im|it's|its|this is|call me(?!\s+(?:on|later|back|at|if|when|up|tomorrow)))\s+([a-zA-Z][a-zA-Z' -]{0,46})/i)
     if (nameIntroMatch) {
       nameRawMatch = nameIntroMatch[0]
       const rawName = nameIntroMatch[1].split(/(?:,|\. | and |, and | at |@| can | please | help | book | organize | schedule | i need)/i)[0]
       if (rawName && rawName.trim().length >= 2) {
-        nameCandidate = sanitizeName(rawName)
+        const clean = sanitizeName(rawName)
+        nameCandidate = clean.charAt(0).toUpperCase() + clean.slice(1)
       }
     }
   }
 
-  // Single word name answer (e.g. user simply says "Amirlan")
+  // Handle "Amirlan here" pattern
+  if (!nameCandidate && !isNegativeCall) {
+    const hereMatch = normalized.match(/^([a-zA-Z][a-zA-Z' -]{1,30})\s+here[.!?]*$/i)
+    if (hereMatch && !/^(?:i am|i'm|it's|its)/i.test(hereMatch[1])) {
+      const raw = sanitizeName(hereMatch[1])
+      nameCandidate = raw.charAt(0).toUpperCase() + raw.slice(1)
+      nameRawMatch = hereMatch[0]
+    }
+  }
+
+  // Single word name answer (e.g. user simply says "Amirlan" or "amirlan")
   if (!nameCandidate && !gmailCandidate && !isNegativeCall) {
-    const singleNameMatch = normalized.match(/^[A-Z][a-zA-Z' -]{1,30}$/)
-    if (singleNameMatch && !/^(?:yes|yeah|sure|okay|skip|help|flight|inbox|gmail|persona|demo|not now)$/i.test(normalized)) {
-      nameCandidate = sanitizeName(normalized)
+    const singleNameMatch = normalized.match(/^[a-zA-Z][a-zA-Z' -]{1,30}$/)
+    if (singleNameMatch && !/^(?:yes|yeah|sure|okay|skip|help|flight|inbox|gmail|persona|demo|not now|nope|fine|good|great|nothing)$/i.test(normalized)) {
+      const raw = sanitizeName(normalized)
+      nameCandidate = raw.charAt(0).toUpperCase() + raw.slice(1)
       nameRawMatch = normalized
     }
   }

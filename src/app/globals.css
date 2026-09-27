@@ -518,12 +518,182 @@ input:focus-visible {
   font-weight: 500;
 }
 
+/* Smooth In-Call Gmail Connector Banner */
+.ios-call-gmail-wrap {
+  width: 100%;
+  max-width: 380px;
+  margin: 0.85rem 0 0.25rem;
+}
+
+.ios-call-gmail-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 0.85rem;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.ios-call-gmail-card:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+}
+
+.ios-call-gmail-card:active {
+  transform: scale(0.985);
+}
+
+.ios-call-gmail-card.connected {
+  background: rgba(52, 199, 89, 0.12);
+  border-color: rgba(52, 199, 89, 0.3);
+}
+
+.ios-call-gmail-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  text-align: left;
+}
+
+.ios-call-gmail-badge {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+
+.ios-call-gmail-badge.success {
+  background: #34c759;
+  color: #ffffff;
+}
+
+.ios-call-gmail-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ios-call-gmail-title {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #ffffff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ios-call-gmail-desc {
+  font-size: 0.73rem;
+  color: #8e8e93;
+}
+
+.ios-call-gmail-card.connected .ios-call-gmail-desc {
+  color: #34c759;
+  font-weight: 500;
+}
+
+.ios-call-gmail-right {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+}
+
+.ios-call-gmail-btn {
+  padding: 0.35rem 0.8rem;
+  border-radius: 9999px;
+  background: #ffffff;
+  color: #000000;
+  font-size: 0.76rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: transform 120ms ease, opacity 120ms ease;
+}
+
+.ios-call-gmail-btn:hover {
+  transform: scale(1.05);
+}
+
+.ios-call-gmail-btn:active {
+  transform: scale(0.95);
+}
+
+.ios-call-gmail-skip {
+  width: 1.65rem;
+  height: 1.65rem;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: #8e8e93;
+  border: none;
+  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.ios-call-gmail-skip:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+.ios-call-gmail-change-btn {
+  padding: 0.3rem 0.65rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-size: 0.74rem;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.ios-call-gmail-change-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.ios-call-gmail-skipped-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #8e8e93;
+  font-size: 0.78rem;
+  cursor: pointer;
+  margin: 0 auto;
+  transition: all 120ms ease;
+}
+
+.ios-call-gmail-skipped-pill:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
 .ios-call-wave-wrap {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 3rem;
-  margin: 1.5rem 0;
+  height: 2.75rem;
+  margin: 1.25rem 0 1rem;
 }
 
 .ios-call-waves {
@@ -562,43 +732,88 @@ input:focus-visible {
   to { height: 45%; }
 }
 
+/* Live Apple-Style Subtitles / Live Captions */
 .ios-call-subtitles {
   width: 100%;
   max-width: 380px;
-  min-height: 4.5rem;
+  min-height: 5.25rem;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  align-items: center;
-  text-align: center;
   padding: 0.75rem 1rem;
-  background: rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   margin-bottom: 2rem;
+  box-sizing: border-box;
 }
 
-.ios-subtitle-line {
-  margin: 0;
-  font-size: 0.95rem;
-  line-height: 1.4;
-  color: #ffffff;
+.ios-captions-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-bottom: 0.35rem;
 }
 
-.ios-subtitle-line.agent span {
-  color: #ffffff;
+.ios-captions-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #8e8e93;
 }
 
-.ios-subtitle-line.user span {
+.ios-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #8e8e93;
+  transition: all 180ms ease;
+}
+
+.ios-live-dot.speaking {
+  background: #34c759;
+  box-shadow: 0 0 8px rgba(52, 199, 89, 0.85);
+  transform: scale(1.25);
+}
+
+.ios-caption-bubble {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  text-align: left;
+}
+
+.ios-caption-speaker {
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.ios-caption-speaker.user {
   color: #34c759;
 }
 
-.ios-subtitle-line.placeholder span {
+.ios-caption-speaker.agent {
+  color: #a1a1aa;
+}
+
+.ios-caption-content {
+  font-size: 0.95rem;
+  line-height: 1.4;
+  color: #ffffff;
+  font-weight: 450;
+  word-break: break-word;
+}
+
+.ios-caption-idle {
+  font-size: 0.88rem;
   color: #8e8e93;
   font-style: italic;
-  font-size: 0.92rem;
+  text-align: center;
+  padding: 0.25rem 0;
 }
 
 .ios-call-keypad {
