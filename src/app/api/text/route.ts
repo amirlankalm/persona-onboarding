@@ -312,7 +312,48 @@ function intelligentFallback({
   const lower = trimmed.toLowerCase()
   const isAllLower = trimmed.length > 1 && trimmed === lower && !/[A-Z]/.test(trimmed)
 
-  // 1. Meta / Complaints about bot style, em dashes, or robotic voice
+  // 1. User asks what their name is ("whats my name", "do you know my name", "who am i")
+  if (/\b(?:what(?:'s|s| is) my name|who am i|do you know my name|what do you call me)\b/i.test(lower)) {
+    if (knownUserName) {
+      return cleanReply(`your name is ${knownUserName}.`)
+    }
+    return cleanReply("i don't have your name yet! what should i call you?")
+  }
+
+  // 2. User denies or corrects their name ("no im not kk", "that's not my name", "im not [x]")
+  if (/\b(?:no\s+)?(?:i'?m not|im not|that'?s not my name|wrong name)\b/i.test(lower)) {
+    const newNameMatch = message.match(/(?:actually|call me|my name is|i'm|im)(?!\s+not\b)\s+([a-zA-Z][a-zA-Z' -]{1,30})/i)
+    if (newNameMatch) {
+      const cleanNewName = newNameMatch[1].trim()
+      return cleanReply(`my bad! got it, ${cleanNewName}. what can i help you with?`)
+    }
+    return cleanReply("my bad, sorry about that! what's your real name?")
+  }
+
+  // 3. User asks about clearing Gmail or capabilities
+  if (/\b(?:clear|clean|delete|empty|organize|triage|wipe)\s+(?:my\s+)?(?:gmail|inbox|emails|mail)\b/i.test(lower) || /\bcan you\s+(?:clear|clean|delete|access)\b/i.test(lower)) {
+    const prefix = knownUserName ? `${knownUserName}, ` : ''
+    return cleanReply(`${prefix}i can't directly delete or access your inbox, but i've sketched a proposed inbox pass on screen. take a look whenever you're ready!`)
+  }
+
+  // 4. User mentions call state ("you're on a no call", "you're on mute")
+  if (/\b(?:you'?re on a no call|youre on a no call|why are you muted|unmute|on mute|no call)\b/i.test(lower)) {
+    return cleanReply("got it, i'm right here on text. what can i help you with?")
+  }
+
+  // 5. Short chat slang / acknowledgments ("kk", "ok", "cool", "alright")
+  if (/^(?:kk|k|ok|okay|cool|alright|bet|sounds good|got it|copy that)[.!]?$/i.test(lower)) {
+    if (knownTask) {
+      return cleanReply("sounds good. want to take a look at the proposed step on screen?")
+    }
+    if (missing.includes('task')) {
+      const prefix = knownUserName ? `${knownUserName}, ` : ''
+      return cleanReply(`${prefix}sounds good. what's one thing on your plate i can help with?`)
+    }
+    return cleanReply("sounds good! let me know if you need anything else.")
+  }
+
+  // 6. Meta / Complaints about bot style, em dashes, or robotic voice
   if (/\b(?:em\s*dash|em-dash|dash|dashes|hyphen)\b/i.test(lower)) {
     return cleanReply('my bad, no dashes at all. keeping it clean. what can i help you with?')
   }
@@ -323,12 +364,11 @@ function intelligentFallback({
     return cleanReply("got it, keeping it completely real. what should i call you, and what are we working on?")
   }
 
-  // 2. Call drop / text continuity ("can you hear me", "continue", "what did you say", "i'm on text")
+  // 7. Call drop / text continuity ("can you hear me", "continue", "what did you say", "i'm on text")
   if (/\b(?:what('?s| is) my task|what task|current task)\b/i.test(lower) && knownTask) {
     return cleanReply(`your current task is: "${knownTask}". want to adjust it?`)
   }
   if (/\b(?:can you hear me|hear me|hello\??|are you there|you there|what did you say|what were you saying|repeat that|switched to text|on text now|prefer text|call dropped|disconnected|continue|go on)\b/i.test(lower)) {
-    // Look at the last thing the agent said in transcript
     const lastAgentMessage = [...transcript].reverse().find(t => t.source === 'agent')?.text.toLowerCase() ?? ''
     if (lastAgentMessage.includes('call you') || lastAgentMessage.includes('who am i') || lastAgentMessage.includes('your name')) {
       return cleanReply('i was asking what i should call you.')
@@ -345,8 +385,8 @@ function intelligentFallback({
     return cleanReply("i'm right here on text. what should i call you?")
   }
 
-  // 3. Refusal or skip ("no", "skip", "nah", "nothing", "not now", "pass")
-  if (isRefusal(message) || /^(no|nope|skip|nothing|nah|not now|no thanks|pass)\.?$/i.test(lower)) {
+  // 8. Refusal or skip ("no", "skip", "nah", "nothing", "not now", "pass")
+  if (isRefusal(message)) {
     if (missing.includes('gmail')) {
       return cleanReply("all good, we can skip Gmail for now. what's one thing you'd want help with?")
     }
@@ -359,11 +399,13 @@ function intelligentFallback({
     return cleanReply("all good, i'm right here whenever you need anything.")
   }
 
-  // 4. Candidate extraction (Name, Gmail, Task)
+  // 9. Candidate extraction (Name, Gmail, Task)
   const candidates = parseCandidates(message)
-  const name = candidates.userName || knownUserName
+  const hasExplicitNameIntro = /(?:my name is|i am|i'm|im|call me|actually (?:it's|my name is))\s+[a-zA-Z]/i.test(message)
+  const isNameUpdate = candidates.userName && (!knownUserName || hasExplicitNameIntro)
+  const name = isNameUpdate ? candidates.userName : knownUserName
 
-  if (candidates.userName) {
+  if (isNameUpdate && candidates.userName) {
     if (candidates.task) {
       return cleanReply(`got it, ${candidates.userName}. i noted down "${candidates.task}" and sketched out a first step on screen.`)
     }
@@ -391,7 +433,7 @@ function intelligentFallback({
     return cleanReply("got your email saved for this demo. what's one thing i can help you with?")
   }
 
-  // 5. Casual greetings & questions
+  // 10. Casual greetings & questions
   if (/^(hi|hey|hello|yo|sup|what's up|howdy)\b/i.test(lower)) {
     if (name) {
       return cleanReply(`hey ${name}! what's one thing on your plate today?`)
@@ -411,8 +453,8 @@ function intelligentFallback({
     return cleanReply("anytime! let me know if there's anything else you want to tackle.")
   }
 
-  // 6. Slot-driven progress default
-  if (missing.includes('userName')) {
+  // 11. Slot-driven progress default
+  if (missing.includes('userName') && !name) {
     return cleanReply('what should i call you?')
   }
   if (missing.includes('task')) {

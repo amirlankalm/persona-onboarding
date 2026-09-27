@@ -1,115 +1,72 @@
-# Persona Onboarding
+# persona-onboarding
 
-A high-fidelity onboarding demo for a personal AI assistant — **Persona**. The experience simulates a first contact: the user names their agent, then gets an incoming call (or can continue by text) to share their name, Gmail, and a task they need help with. Adaptive, conversational, and resilient to any user behaviour.
+Demo of a personal AI's first conversation. The user names the agent, gets a simulated incoming call, and — over voice or text — shares their name, Gmail, and one thing they need help with.
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/amirlankalm/persona-onboarding)
 
 ---
 
-## ✨ What it does
+## How it works
 
-| Step | Description |
-|---|---|
-| **Name the Agent** | User picks a name for their personal AI on the landing screen |
-| **Incoming Call** | Simulated iOS-style phone call rings — user can Accept or Decline |
-| **Voice Onboarding** | Live WebRTC voice call collects: user name, Gmail, and first task — via Speko's realtime voice AI |
-| **Text Fallback** | Decline, hangup, mic denial, or refresh? Seamlessly continues as iMessage-style chat powered by Groq (LLaMA 3.3 70B) |
-| **Gmail Connect** | Google OAuth UI card appears naturally mid-conversation — never at the start |
-| **Graduation** | Once enough context is gathered, the UI surfaces a proposed first task step and celebrates the setup |
+The user lands on a blank screen. Their agent has no name yet. They type one, a contact card arrives, and the phone rings.
+
+From there:
+
+- **Accept** — live WebRTC call via Speko. The agent collects name, Gmail, and a task in whatever order the user gives them.
+- **Decline / hang up / mic denied** — drops into an iMessage-style chat that picks up exactly where the call left off. Same transcript, same slots.
+- **Refresh mid-flow** — state rehydrates from localStorage. Nothing is lost.
+
+When the agent has enough to go on, it surfaces a proposed first step and lets the conversation continue below it.
+
+Gmail is treated honestly. Providing an address in the demo marks it as `address_provided`, not `connected`. OAuth would be needed for the real thing, and the UI says so.
 
 ---
 
-## 🏗 Architecture
+## State
 
-```
-Browser (React 19 / Next.js 16)
-│
-├── SCREEN 1: Naming  — user picks agent name, localStorage persisted
-├── SCREEN 2: Ringing — iOS incoming call UI with iMessage sound effects
-├── SCREEN 3: Voice   — live WebRTC call via @spekoai/client
-│     ├── Speko Agent (voice AI)
-│     │     └── llama-3.3-70b via Groq (on Speko's infra)
-│     ├── Transcript: real-time captions + slot extraction
-│     └── Webhooks: signed Standard Webhooks → /api/speko/tools
-│
-└── SCREEN 4: Text    — iMessage-style chat (fallback or user choice)
-      ├── /api/text → Groq API (llama-3.3-70b-versatile)
-      │     ├── Full conversation history context
-      │     ├── Agent persona + slot awareness prompt
-      │     └── Graceful rule-based fallback if key not set
-      └── /api/voice-session → Speko session minting (server-only)
-```
-
-### State Machine
+One `OnboardingState` object in versioned localStorage. All transitions go through a pure reducer.
 
 ```
 naming → ringing → [voice | text] → collecting → graduated
-                         ↕ (recoverable at any point)
 ```
 
-One `OnboardingState` object lives in versioned `localStorage`. All transitions are pure reducer functions. Slots: `empty → candidate → confirmed / skipped / address_provided`.
+Slots move through `empty → candidate → confirmed / skipped`. Switching channels (voice to text or back) carries the full transcript over.
 
 ---
 
-## 🤖 Models Used
-
-| Purpose | Model | Provider |
-|---|---|---|
-| Text conversation (iMessage mode) | **LLaMA 3.3 70B Versatile** | [Groq](https://console.groq.com) |
-| Voice agent (phone call mode) | **LLaMA 3.3 70B** (via Speko cascade) | [Speko](https://speko.ai) |
-| Voice infrastructure | LiveKit WebRTC + Speko workers | Speko |
-| Speech-to-text | Deepgram Nova-3 (Speko managed) | Speko |
-| Text-to-speech | Cartesia Sonic (Speko managed) | Speko |
-
----
-
-## 🚀 Getting Started
-
-### 1. Clone
+## Setup
 
 ```bash
 git clone https://github.com/amirlankalm/persona-onboarding
 cd persona-onboarding
 npm install
-```
-
-### 2. Configure environment
-
-```bash
 cp .env.example .env.local
 ```
 
 Edit `.env.local`:
 
 ```env
-# Required for voice call
-SPEKO_API_KEY=sk_live_...        # console.speko.ai
+# Voice call (required for live mic)
+SPEKO_API_KEY=sk_live_...
 SPEKO_AGENT_ID=agent_...
 SPEKO_WEBHOOK_SECRET=whsec_...
 
-# Required for intelligent text chat
-GROQ_API_KEY=gsk_...             # console.groq.com (free tier)
+# Text chat (optional — falls back to rule-based replies if absent)
+GROQ_API_KEY=gsk_...
 
 # Optional
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
-> **Text mode works without Speko keys** — it falls back to rule-based replies. Voice requires Speko credentials.
-
-### 3. Run
-
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
-
 ---
 
-## 🎙 Speko Agent Setup
+## Speko agent
 
-1. Go to [console.speko.ai](https://console.speko.ai) and create an agent.
-2. Paste this system prompt:
+Create an agent at [console.speko.ai](https://console.speko.ai). Use this system prompt:
 
 ```
 You are {{agentName}}, a new personal assistant the user just named on screen.
@@ -129,98 +86,55 @@ One gentle redirect after off-topic input. On silence or audio trouble, offer te
 Stop asking when the user graduates.
 ```
 
-3. Register these 5 webhook tools pointing at `https://YOUR-DOMAIN/api/speko/tools`:
-   - `save_name` — `{ name: string }`
-   - `save_gmail` — `{ address: string }`
-   - `save_task` — `{ task: string }`
-   - `show_gmail_connect` — no params
-   - `end_call` — no params
+Register 5 webhook tools pointing at `https://YOUR-DOMAIN/api/speko/tools`:
 
-4. Copy the webhook signing secret → `SPEKO_WEBHOOK_SECRET`.
+| Tool | Params |
+|---|---|
+| `save_name` | `{ name: string }` |
+| `save_gmail` | `{ address: string }` |
+| `save_task` | `{ task: string }` |
+| `show_gmail_connect` | none |
+| `end_call` | none |
+
+Copy the signing secret to `SPEKO_WEBHOOK_SECRET`.
 
 ---
 
-## 🌐 Deploy to Vercel
+## Deploy
 
-### Environment Variables to add in Vercel dashboard:
-
-```
-SPEKO_API_KEY
-SPEKO_AGENT_ID
-SPEKO_WEBHOOK_SECRET
-GROQ_API_KEY
-NEXT_PUBLIC_APP_URL=https://your-domain.vercel.app
-```
-
-### Deploy steps:
+Add env vars in the Vercel dashboard (`SPEKO_API_KEY`, `SPEKO_AGENT_ID`, `SPEKO_WEBHOOK_SECRET`, `GROQ_API_KEY`, `NEXT_PUBLIC_APP_URL`), then:
 
 ```bash
-npm install -g vercel
 vercel --prod
 ```
 
-Or click the deploy button at the top of this README.
-
-> After deploy, update `NEXT_PUBLIC_APP_URL` to your Vercel URL and update the Speko webhook URL to `https://your-domain.vercel.app/api/speko/tools`.
+Update the Speko webhook URL to `https://your-domain.vercel.app/api/speko/tools`.
 
 ---
 
-## 🔒 Security Notes
-
-- `SPEKO_API_KEY`, `GROQ_API_KEY`, and `SPEKO_WEBHOOK_SECRET` are **server-only** — never exposed to the browser
-- Speko webhooks are verified with Standard Webhooks signature verification + 5-minute replay prevention
-- Groq API is called only from the server-side `/api/text` route
-
----
-
-## 🧪 Testing
+## Tests
 
 ```bash
-npm test          # 23 unit + stress tests (Vitest)
-npm run typecheck # TypeScript strict check
-npm run lint      # ESLint
-npm run build     # Production build verification
+npm test          # 23 tests (Vitest)
+npm run typecheck
+npm run lint
+npm run build
 ```
 
-### Test Coverage
-
-- 15 acceptance tests: normal flow, one-breath multi-slot, hangup recovery, mic denial, localStorage hydration, refusals, task-before-name, ambiguous email correction, noise handling, idempotent reconnect, truthful Gmail status, channel transitions
-- 8 stress tests: ReDoS safety (50k-char input in <100ms), 10k random state transitions, hostile Unicode/XSS/SQL injection inputs, localStorage corruption recovery, concurrent hangup/reconnect races
+Covers: normal flow, one-breath multi-slot utterances, hang-up recovery, mic denial, localStorage hydration, refusals, task-before-name ordering, ambiguous email correction, noise/off-topic input, idempotent reconnect, channel transitions, and ReDoS/hostile input stress tests.
 
 ---
 
-## 📁 Project Structure
+## Security
 
-```
-src/
-├── app/
-│   ├── api/
-│   │   ├── text/route.ts          # Groq LLM text conversation
-│   │   ├── voice-session/route.ts # Speko session minting
-│   │   └── speko/tools/route.ts   # Signed webhook receiver
-│   ├── page.tsx
-│   └── globals.css
-├── components/
-│   └── PersonaOnboarding.tsx      # Main UI (1300+ lines)
-└── lib/
-    ├── onboarding.ts              # State machine, reducer, parseCandidates
-    ├── audio.ts                   # iMessage/iOS sound effects
-    ├── onboarding.test.ts         # 15 acceptance tests
-    └── stress.test.ts             # 8 stress/crash tests
-```
+`SPEKO_API_KEY`, `GROQ_API_KEY`, and `SPEKO_WEBHOOK_SECRET` never touch the browser. Webhooks from Speko are verified with Standard Webhooks signatures and a 5-minute replay window.
 
 ---
 
-## 🎨 Design
+## Stack
 
-- **Visual language**: Apple iOS iMessage + yourpersona.com — high-craft monochrome, warm paper nuance
-- **Typography**: Inter / -apple-system (UI), DM Mono (technical)
-- **Colors**: Deep ink `#09090b`, secondary `#71717a`, border `#e4e4e7`, live emerald `#10b981`
-- **Sound**: Synthesized iMessage send/receive tones, iOS ringtone, call connect/end tones via Web Audio API (no files, zero latency)
-- **Call UI**: Faithful Apple iOS active call layout — 2×3 button grid, live waveform visualizer, real-time captions
+Next.js 16 (Turbopack), React 19, TypeScript, Vitest. Voice via `@spekoai/client`. Text via Groq (LLaMA 3.3 70B) with a multi-provider fallback chain. Web Audio API for all sound effects — no audio files.
 
 ---
-
-## 📝 License
 
 MIT

@@ -406,9 +406,16 @@ export function PersonaOnboarding() {
       return
     }
 
+    const hasExplicitNameIntro = /(?:my name is|i am|i'm|im|call me|actually (?:it's|my name is))\s+[a-zA-Z]/i.test(message)
+    const isDenyingName = /\b(?:no\s+)?(?:i'?m not|im not|not|that'?s not my name)\b/i.test(message)
+    if (isDenyingName && !hasExplicitNameIntro) {
+      dispatch({ type: 'set-user-name', value: '', status: 'empty' })
+      return
+    }
+
     const candidates = parseCandidates(message)
     const current = stateRef.current
-    if (candidates.userName && (current.userName.status === 'empty' || current.userName.status === 'candidate')) {
+    if (candidates.userName && (current.userName.status === 'empty' || current.userName.status === 'candidate' || hasExplicitNameIntro)) {
       dispatch({ type: 'set-user-name', value: candidates.userName, status: 'confirmed' })
     }
     if (candidates.gmail && (current.gmail.status === 'empty' || current.gmail.status === 'candidate')) {
@@ -431,7 +438,18 @@ export function PersonaOnboarding() {
     applyCandidates(message)
 
     const candidates = parseCandidates(message)
-    const effectiveUserName = candidates.userName || state.userName.value || undefined
+    const hasExplicitNameIntro = /(?:my name is|i am|i'm|im|call me|actually (?:it's|my name is))\s+[a-zA-Z]/i.test(message)
+    const isDenyingName = /\b(?:no\s+)?(?:i'?m not|im not|not|that'?s not my name)\b/i.test(message)
+
+    let effectiveUserName: string | undefined = undefined
+    if (isDenyingName && !hasExplicitNameIntro) {
+      effectiveUserName = undefined
+    } else if (state.userName.status === 'confirmed' && state.userName.value && !hasExplicitNameIntro) {
+      effectiveUserName = state.userName.value
+    } else {
+      effectiveUserName = candidates.userName || state.userName.value || undefined
+    }
+
     const effectiveTask = candidates.task || state.task.value || undefined
     const effectiveGmailStatus = candidates.gmail ? 'address_provided' : state.gmail.status
     const effectiveMissing: ('userName' | 'gmail' | 'task')[] = []

@@ -176,14 +176,28 @@ export function taskFirstStep(task: string): { title: string; detail: string } {
 }
 
 export function isRefusal(message: string): boolean {
-  const normalized = message.trim().toLowerCase()
-  return /^(?:no|nope|skip|not now|skip it|skip this|no thanks|no thank you|don't want to|dont want to|pass|later|never mind)/i.test(normalized)
+  const normalized = message.trim().toLowerCase().replace(/[.!?,]+$/, '').trim()
+  return /^(?:no|nope|nah|skip|skip it|skip this|not now|no thanks|no thank you|don't want to|dont want to|pass|later|never mind)$/i.test(normalized) ||
+    /^(?:no|nope|nah|skip)\s+(?:thanks|thank you|for now|pls|please)$/i.test(normalized)
 }
+
+const NON_NAME_WORDS = new Set([
+  'kk', 'k', 'ok', 'okay', 'sure', 'yes', 'yeah', 'yep', 'yup', 'nah', 'nope', 'no',
+  'cool', 'fine', 'right', 'alright', 'good', 'great', 'nothing', 'none', 'never',
+  'wait', 'huh', 'what', 'whats', 'who', 'whos', 'where', 'wheres', 'when', 'whens',
+  'why', 'whys', 'how', 'hows', 'which', 'whose', 'can', 'could', 'would', 'should',
+  'is', 'are', 'am', 'do', 'does', 'did', 'tell', 'show', 'say', 'know',
+  'i', 'me', 'my', 'mine', 'you', 'your', 'youre', 'he', 'him', 'his', 'she', 'her',
+  'it', 'its', 'we', 'us', 'our', 'they', 'them', 'their', 'this', 'that', 'these', 'those',
+  'the', 'a', 'an', 'and', 'or', 'but', 'if', 'so', 'to', 'of', 'for', 'in', 'on', 'at', 'by', 'with', 'from',
+  'lol', 'lmao', 'haha', 'brb', 'idk', 'idc', 'omg', 'np', 'ty', 'thx', 'yo', 'hi', 'hey', 'hello', 'sup',
+  'flight', 'inbox', 'email', 'gmail', 'persona', 'demo', 'help', 'name', 'clear', 'clean', 'delete'
+])
 
 export function parseCandidates(message: string): { userName?: string; gmail?: string; task?: string } {
   const safeMessage = message.slice(0, 1000)
   const normalized = safeMessage.replace(/\s+/g, ' ').trim()
-  const COMMON_FILLERS = /^(?:sure|ok|okay|yes|yeah|yep|yup|right|fine|alright|uh|um|hmm|cool|thanks|thank you|hello|hi|hey|yo)[.!?]*$/i
+  const COMMON_FILLERS = /^(?:sure|ok|okay|yes|yeah|yep|yup|right|fine|alright|uh|um|hmm|cool|thanks|thank you|hello|hi|hey|yo|kk|k|lol)[.!?]*$/i
   if (!normalized || isRefusal(normalized) || COMMON_FILLERS.test(normalized)) {
     return {}
   }
@@ -217,11 +231,12 @@ export function parseCandidates(message: string): { userName?: string; gmail?: s
   const isNegativeCall = /(?:can't|cannot|don't|dont|won't|wont|not)\s+(?:call me|call)\b/i.test(normalized)
 
   if (!isNegativeCall) {
-    const nameIntroMatch = normalized.match(/(?:my name is|i am|i'm|im|it's|its|this is|call me(?!\s+(?:on|later|back|at|if|when|up|tomorrow)))\s+([a-zA-Z][a-zA-Z' -]{0,46})/i)
+    const nameIntroMatch = normalized.match(/(?:my name is|i am|i'm|im|it's|its|this is|call me(?!\s+(?:on|later|back|at|if|when|up|tomorrow))|name is|actually it's|actually its)\s+([a-zA-Z][a-zA-Z' -]{0,46})/i)
     if (nameIntroMatch) {
       nameRawMatch = nameIntroMatch[0]
-      const rawName = nameIntroMatch[1].split(/(?:,|\. | and |, and | at |@| can | please | help | book | organize | schedule | i need)/i)[0]
-      if (rawName && rawName.trim().length >= 2) {
+      const rawName = nameIntroMatch[1].split(/(?:,|\. | and |, and | at |@| can | please | help | book | organize | schedule | i need)/i)[0].trim()
+      const cleanWord = rawName.toLowerCase().replace(/[^a-z]/g, '')
+      if (rawName.length >= 2 && !NON_NAME_WORDS.has(cleanWord)) {
         const clean = sanitizeName(rawName)
         nameCandidate = clean.charAt(0).toUpperCase() + clean.slice(1)
       }
@@ -232,20 +247,29 @@ export function parseCandidates(message: string): { userName?: string; gmail?: s
   if (!nameCandidate && !isNegativeCall) {
     const hereMatch = normalized.match(/^([a-zA-Z][a-zA-Z' -]{1,30})\s+here[.!?]*$/i)
     if (hereMatch && !/^(?:i am|i'm|it's|its)/i.test(hereMatch[1])) {
-      const raw = sanitizeName(hereMatch[1])
-      nameCandidate = raw.charAt(0).toUpperCase() + raw.slice(1)
-      nameRawMatch = hereMatch[0]
+      const cleanWord = hereMatch[1].toLowerCase().replace(/[^a-z]/g, '')
+      if (!NON_NAME_WORDS.has(cleanWord)) {
+        const raw = sanitizeName(hereMatch[1])
+        nameCandidate = raw.charAt(0).toUpperCase() + raw.slice(1)
+        nameRawMatch = hereMatch[0]
+      }
     }
   }
 
   // Single word or full name answer (e.g. user simply says "Amirlan" or "Amirlan Kalmukhan")
-  const taskActionVerbs = /^(?:book|plan|organize|schedule|summarize|clean|find|draft|write|check|set up|setup|remind|track|cancel|triage|buy|order|look up|prepare|create|manage|sort|filter|review)\b/i
-  if (!nameCandidate && !gmailCandidate && !isNegativeCall && !taskActionVerbs.test(normalized)) {
-    const singleNameMatch = normalized.match(/^[a-zA-Z]{2,24}(?:[ -][a-zA-Z]{1,24}){0,2}$/)
-    if (singleNameMatch && !/^(?:yes|yeah|sure|okay|skip|help|flight|inbox|gmail|persona|demo|not now|nope|fine|good|great|nothing)$/i.test(normalized)) {
-      const raw = sanitizeName(normalized)
-      nameCandidate = raw.split(' ').map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(' ')
-      nameRawMatch = normalized
+  const taskActionVerbs = /^(?:book|plan|organize|schedule|summarize|clean|clear|find|draft|write|check|set up|setup|remind|track|cancel|triage|buy|order|look up|prepare|create|manage|sort|filter|review)\b/i
+  if (!nameCandidate && !gmailCandidate && !isNegativeCall && !taskActionVerbs.test(normalized) && !normalized.includes('?')) {
+    const words = normalized.split(/\s+/)
+    if (words.length >= 1 && words.length <= 2) {
+      const allWordsValid = words.every((w) => {
+        const clean = w.toLowerCase().replace(/[^a-z]/g, '')
+        return clean.length >= 2 && clean.length <= 20 && !NON_NAME_WORDS.has(clean)
+      })
+      if (allWordsValid) {
+        const raw = sanitizeName(normalized)
+        nameCandidate = raw.split(' ').map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ')
+        nameRawMatch = normalized
+      }
     }
   }
 
@@ -253,7 +277,7 @@ export function parseCandidates(message: string): { userName?: string; gmail?: s
   let taskCandidate: string | undefined
   const explicitTaskMatch = normalized.match(/(?:help (?:me )?(?:with|to)|i need (?:help )?(?:with|to)?|can you|please|could you)\s+(.+)/i)
   if (explicitTaskMatch) {
-    const raw = explicitTaskMatch[1]
+    const raw = explicitTaskMatch[1].replace(/[.!?]+$/, '')
     if (!/(?:call me on|hang up|talk later)/i.test(raw)) {
       taskCandidate = sanitizeTask(raw)
     }
@@ -268,9 +292,8 @@ export function parseCandidates(message: string): { userName?: string; gmail?: s
     }
   } else {
     // Standalone action task without explicit intro (e.g. "book me a flight Friday", "organize my inbox")
-    const taskActionVerbs = /^(?:book|plan|organize|schedule|summarize|clean|find|draft|write|check|set up|setup|remind|track|cancel|triage|buy|order|look up|prepare|create|manage|sort|filter|review)\b/i
     if (taskActionVerbs.test(normalized)) {
-      taskCandidate = sanitizeTask(normalized)
+      taskCandidate = sanitizeTask(normalized.replace(/[.!?]+$/, ''))
     }
   }
 
