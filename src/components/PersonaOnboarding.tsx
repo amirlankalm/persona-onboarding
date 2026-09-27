@@ -14,7 +14,6 @@ import {
 import {
   createInitialState,
   getNextQuestion,
-  getSlotSummary,
   isGmailAddress,
   isRefusal,
   ONBOARDING_STORAGE_KEY,
@@ -175,13 +174,6 @@ export function PersonaOnboarding() {
       window.removeEventListener('keydown', unblockOnInteraction)
     }
   }, [audioBlocked])
-
-  const progress = useMemo(() => getSlotSummary(state), [state])
-  const missing = useMemo(() => progress.filter((slot) => !slot.complete && !slot.skipped).map((slot) => {
-    if (slot.label === 'your name') return 'userName'
-    if (slot.label === 'Gmail') return 'gmail'
-    return 'task'
-  }), [progress])
 
   // Show Gmail connector card only when:
   // 1. Gmail slot is empty or candidate (not already provided/skipped/connected)
@@ -438,6 +430,20 @@ export function PersonaOnboarding() {
     append(dispatch, { source: 'user', text: message, final: true })
     applyCandidates(message)
 
+    const candidates = parseCandidates(message)
+    const effectiveUserName = candidates.userName || state.userName.value || undefined
+    const effectiveTask = candidates.task || state.task.value || undefined
+    const effectiveGmailStatus = candidates.gmail ? 'address_provided' : state.gmail.status
+    const effectiveMissing: ('userName' | 'gmail' | 'task')[] = []
+    if (!effectiveUserName && state.userName.status !== 'skipped') effectiveMissing.push('userName')
+    if (!['address_provided', 'connected'].includes(effectiveGmailStatus) && state.gmail.status !== 'skipped') effectiveMissing.push('gmail')
+    if (!effectiveTask && state.task.status !== 'skipped') effectiveMissing.push('task')
+
+    const updatedTranscript = [
+      ...state.transcript.slice(-12).map((t) => ({ source: t.source, text: t.text })),
+      { source: 'user' as const, text: message }
+    ]
+
     try {
       if (state.channel === 'voice' && conversationRef.current?.isOpen()) {
         await conversationRef.current.sendChatMessage(message)
@@ -448,11 +454,11 @@ export function PersonaOnboarding() {
           body: JSON.stringify({
             message,
             agentName: state.agentName,
-            missing,
-            knownUserName: state.userName.value || undefined,
-            knownTask: state.task.value || undefined,
-            gmailStatus: state.gmail.status,
-            transcript: state.transcript.slice(-12).map(t => ({ source: t.source, text: t.text })),
+            missing: effectiveMissing,
+            knownUserName: effectiveUserName,
+            knownTask: effectiveTask,
+            gmailStatus: effectiveGmailStatus,
+            transcript: updatedTranscript,
             phase: state.phase
           })
         })
@@ -607,78 +613,50 @@ export function PersonaOnboarding() {
         <main className="ios-call-screen" id="main-content">
           <div className="ios-call-top">
             <p className="ios-call-sub-top timer">
-              {voiceStatus === 'connecting'
-                ? 'connecting…'
-                : voiceStatus === 'speaking'
-                ? `${state.agentName} speaking…`
-                : formatCallDuration(callSeconds)}
+              {voiceStatus === 'connecting' ? 'connecting…' : formatCallDuration(callSeconds)}
             </p>
             <h1 className="ios-call-title">{state.agentName}</h1>
           </div>
 
-          {/* Smooth In-Call Gmail Connector Banner & Live Captions */}
+          {/* Smooth In-Call Gmail Connector Banner */}
           <div className="ios-call-middle-area">
-            {(isGmailNeeded || state.gmail.status === 'address_provided' || state.gmail.status === 'connected') && (
+            {isGmailNeeded && (
               <div className="ios-call-gmail-wrap">
-                {isGmailNeeded ? (
-                  <div className="ios-call-gmail-card" onClick={() => setIsGmailOpen(true)} role="button" tabIndex={0}>
-                    <div className="ios-call-gmail-left">
-                      <div className="ios-call-gmail-badge">
-                        <GoogleIcon />
-                      </div>
-                      <div className="ios-call-gmail-info">
-                        <span className="ios-call-gmail-title">Connect Google Account</span>
-                        <span className="ios-call-gmail-desc">Link Gmail for this demo</span>
-                      </div>
+                <div className="ios-call-gmail-card" onClick={() => setIsGmailOpen(true)} role="button" tabIndex={0}>
+                  <div className="ios-call-gmail-left">
+                    <div className="ios-call-gmail-badge">
+                      <GoogleIcon />
                     </div>
-                    <div className="ios-call-gmail-right">
-                      <button
-                        className="ios-call-gmail-btn"
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setIsGmailOpen(true)
-                        }}
-                      >
-                        Connect
-                      </button>
-                      <button
-                        className="ios-call-gmail-skip"
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          dispatch({ type: 'skip', slot: 'gmail' })
-                        }}
-                        title="Skip for now"
-                        aria-label="Skip Gmail"
-                      >
-                        ✕
-                      </button>
+                    <div className="ios-call-gmail-info">
+                      <span className="ios-call-gmail-title">Connect Google Account</span>
+                      <span className="ios-call-gmail-desc">Link Gmail for this demo</span>
                     </div>
                   </div>
-                ) : state.gmail.status === 'address_provided' || state.gmail.status === 'connected' ? (
-                  <div className="ios-call-gmail-card connected" onClick={() => setIsGmailOpen(true)} role="button" tabIndex={0}>
-                    <div className="ios-call-gmail-left">
-                      <div className="ios-call-gmail-badge success">
-                        <CheckIcon />
-                      </div>
-                      <div className="ios-call-gmail-info">
-                        <span className="ios-call-gmail-title">{state.gmail.address}</span>
-                        <span className="ios-call-gmail-desc">Google Account Linked</span>
-                      </div>
-                    </div>
+                  <div className="ios-call-gmail-right">
                     <button
-                      className="ios-call-gmail-change-btn"
+                      className="ios-call-gmail-btn"
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation()
                         setIsGmailOpen(true)
                       }}
                     >
-                      Change
+                      Connect
+                    </button>
+                    <button
+                      className="ios-call-gmail-skip"
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        dispatch({ type: 'skip', slot: 'gmail' })
+                      }}
+                      title="Skip for now"
+                      aria-label="Skip Gmail"
+                    >
+                      ✕
                     </button>
                   </div>
-                ) : null}
+                </div>
               </div>
             )}
 
@@ -1260,13 +1238,6 @@ function Video() {
 }
 
 
-function CheckIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  )
-}
 
 function Clock() {
   return (

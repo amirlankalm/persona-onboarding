@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { parseCandidates, isRefusal } from '@/lib/onboarding'
 
 const requestSchema = z.object({
   message: z.string().trim().min(1).max(500),
@@ -15,48 +16,46 @@ const requestSchema = z.object({
   phase: z.enum(['naming', 'ringing', 'collecting', 'graduated']).optional()
 })
 
-function detectUserStyle(userMessages: string[]): string {
-  if (userMessages.length === 0) return ''
+/**
+ * Hard enforcement: strip or replace ALL em dashes (—), en dashes (–), and double hyphens (--).
+ * The user explicitly requested NO em dashes under any circumstances.
+ */
+function cleanReply(text: string): string {
+  return text
+    .replace(/[\u2014\u2013]/g, ', ')
+    .replace(/\s*--\s*/g, ', ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/,\s*,/g, ',')
+    .replace(/\s*,\s*\./g, '.')
+    .trim()
+}
+
+function detectUserStyle(userMessages: string[]): { isAllLower: boolean; styleInstructions: string } {
+  if (userMessages.length === 0) return { isAllLower: false, styleInstructions: '' }
 
   const all = userMessages.join(' ')
   const signals: string[] = []
 
-  // Lowercase with no punctuation = very casual
-  const allLower = userMessages.every(m => m === m.toLowerCase())
+  const isAllLower = userMessages.every(m => m === m.toLowerCase())
   const noPunctuation = userMessages.every(m => !/[.!?,;:]$/.test(m.trim()))
-  if (allLower && noPunctuation) signals.push('very casual: no caps, no punctuation — match this exactly')
-
-  // Check for slang
-  if (/\b(lol|lmao|lmfao|ngl|tbh|fr|bruh|bro|cuh|yo|yk|rn|idk|idc|imo|smh|wtf|omg|lowkey|highkey|slay|bussin|goated|cap|no cap|fam|dawg|homie|chill|vibe|dope|lit|fire)\b/i.test(all)) {
-    signals.push('uses slang/gen-z language — mirror it naturally, don\'t try too hard')
+  if (isAllLower && noPunctuation) {
+    signals.push('very casual: all lowercase, no ending punctuation. Match this exact relaxed lowercase feel.')
   }
 
-  // Check for abbreviations like "u", "ur", "r", "tbh"
-  if (/\b(u|ur|r|b4|rly|thx|np|nvm|imo|irl|btw|smth|sth|cya|ty|plz|pls)\b/i.test(all)) {
-    signals.push('uses text abbreviations (u, ur, rly, etc.) — use similar shortcuts')
+  if (/\b(lol|lmao|lmfao|ngl|tbh|fr|bruh|bro|yo|rn|idk|idc|imo|wtf|omg|lowkey|highkey|chill|vibe)\b/i.test(all)) {
+    signals.push('uses casual slang or shortcuts. Speak back in an easygoing, genuine human voice.')
   }
 
-  // Check for emojis
-  const emojiMatch = all.match(/\p{Emoji_Presentation}/gu)
-  if (emojiMatch && emojiMatch.length > 1) {
-    signals.push('uses emojis — you can use 1 emoji occasionally if it fits naturally')
-  }
-
-  // Check for all caps emphasis
-  if (/[A-Z]{2,}/.test(all)) signals.push('uses caps for emphasis — you can too sparingly')
-
-  // Formal / complete sentences
-  const hasProperCaps = userMessages.some(m => /^[A-Z]/.test(m))
-  const hasPunctuation = userMessages.some(m => /[.!?]$/.test(m.trim()))
-  if (hasProperCaps && hasPunctuation && !allLower) signals.push('writes in proper sentences — be slightly more polished in return')
-
-  // Very short messages (under 5 words)
   const avgLen = userMessages.reduce((sum, m) => sum + m.split(' ').length, 0) / userMessages.length
-  if (avgLen < 5) signals.push('sends very short messages — keep your replies even shorter, punchy')
+  if (avgLen < 6) {
+    signals.push('sends short text messages. Keep replies to 1 or 2 short, punchy sentences max.')
+  }
 
-  return signals.length > 0
-    ? `\nUSER STYLE DETECTED:\n${signals.map(s => `- ${s}`).join('\n')}\nYou MUST adapt your writing style to match theirs. If they write lowercase and short, you write lowercase and short. If they use slang, use it back. Don't be robotic, don't be formal if they aren't.`
+  const styleInstructions = signals.length > 0
+    ? `\nUSER STYLE DETECTED:\n${signals.map(s => `- ${s}`).join('\n')}\nAdapt your tone naturally to match theirs.`
     : ''
+
+  return { isAllLower, styleInstructions }
 }
 
 function buildSystemPrompt(
@@ -67,89 +66,74 @@ function buildSystemPrompt(
   gmailStatus?: string,
   userMessages?: string[]
 ): string {
-  const userName = knownUserName ? `The user's name is ${knownUserName}.` : 'You do not yet know the user\'s name.'
-  const task = knownTask ? `The user wants help with: "${knownTask}".` : 'You do not yet know what the user wants help with.'
+  const userName = knownUserName ? `User name: "${knownUserName}".` : 'User name: not known yet.'
+  const task = knownTask ? `User task: "${knownTask}".` : 'User task: not known yet.'
   const gmail = gmailStatus && gmailStatus !== 'empty'
     ? `Gmail status: ${gmailStatus}.`
-    : 'Gmail has not been connected yet.'
+    : 'Gmail: not linked yet.'
 
   const missingStr = missing.length === 0
-    ? 'All slots are filled.'
-    : `Still missing: ${missing.map(s => s === 'userName' ? "the user's name" : s === 'gmail' ? 'Gmail connection' : 'what the user needs help with').join(', ')}.`
+    ? 'All details collected.'
+    : `Still needed: ${missing.map(s => s === 'userName' ? 'user name' : s === 'gmail' ? 'Gmail' : 'task').join(', ')}.`
 
-  const styleSection = detectUserStyle(userMessages ?? [])
+  const { styleInstructions } = detectUserStyle(userMessages ?? [])
 
-  return `You are ${agentName}, a personal AI assistant doing a first-contact onboarding conversation via iMessage.
+  return `You are ${agentName}, a personal AI assistant in an onboarding text chat via iMessage.
+You and the user are in an ongoing conversation (some turns may have occurred over voice call or text).
 
-CONTEXT:
+CURRENT STATE:
 - ${userName}
 - ${task}
 - ${gmail}
-- ${missingStr}${styleSection}
+- ${missingStr}${styleInstructions}
 
-YOUR GOALS (collect in any order, but don't be a form):
-1. Learn the user's name if not known
-2. Mention that Gmail can be connected via the button on screen (never claim actual inbox access)
-3. Understand one thing the user wants help with — show them you can provide value
-4. If you have enough to show value (especially if they have a concrete task), you can let them "graduate" early
+OBJECTIVES (in any natural order):
+1. Know what to call the user (if not already known).
+2. Learn one thing you can help them with.
+3. Mention that Gmail can be connected via the button on screen (or skip it).
 
-PERSONALITY & TONE:
-- Short, casual, iMessage-style messages (1–3 sentences max)
-- Mirror the user's exact communication style — if they're chill and lowercase, you're chill and lowercase
-- No robotic phrases like "I didn't understand" or "How can I assist you today?"
-- If they say "nothing" or seem disengaged, don't push hard — acknowledge and gently offer
-- If they're off-topic or asking meta questions, answer briefly and naturally, then nudge back
-- NEVER claim to have sent emails, booked things, or accessed their inbox
-- If Gmail is needed, mention "there's a button on screen to connect it" — don't demand they say an email address
-- Be human. React to what they actually said.
-
-IMPORTANT CONSTRAINTS:
-- Reply in 1–3 short sentences only
-- No lists, no bullet points, no markdown
-- No hollow filler ("Great!", "Sure!", "Of course!")
-- Never use em dashes (—). Use a comma, period, or just a space instead
-- If they joke around, play along briefly then get back on track
-- If they say they need nothing, acknowledge it, ask if they want to chill or if anything comes to mind later`
+STRICT RULES:
+- Never use em dashes (—) or en dashes (–). NEVER use them. Use commas or periods instead.
+- 1 to 2 short sentences maximum. Be concise, like real texting.
+- No bullet points, lists, or markdown.
+- No canned AI filler ("Sure!", "Of course!", "How can I assist you?", "Love that energy", "haha. anyway").
+- Never claim you sent an email, booked a flight, or accessed an external service you haven't accessed.
+- If the user gave a task, acknowledge it and reference the proposed first step on screen.
+- If the user asks about the conversation, switches from a call, or complains, react like a real human: apologize simply and adapt immediately.`
 }
 
+// 1. Groq caller
 async function callGroq(
   systemPrompt: string,
-  transcript: Array<{source: 'user' | 'agent', text: string}>,
+  transcript: Array<{ source: 'user' | 'agent'; text: string }>,
   userMessage: string
 ): Promise<string> {
   const apiKey = process.env.GROQ_API_KEY
-  if (!apiKey) {
-    throw new Error('GROQ_API_KEY not configured')
-  }
+  if (!apiKey) throw new Error('GROQ_API_KEY not configured')
 
-  const messages: Array<{role: 'system' | 'user' | 'assistant', content: string}> = [
+  const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
     { role: 'system', content: systemPrompt }
   ]
-
-  // Add conversation history (last 10 turns for context)
-  const recentTranscript = transcript.slice(-10)
-  for (const item of recentTranscript) {
+  for (const item of transcript.slice(-10)) {
     messages.push({
       role: item.source === 'user' ? 'user' : 'assistant',
       content: item.text
     })
   }
-
-  // Add current user message
   messages.push({ role: 'user', content: userMessage })
 
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
     },
     body: JSON.stringify({
       model: 'llama-3.3-70b-versatile',
       messages,
       max_tokens: 150,
-      temperature: 0.85,
-      top_p: 0.9,
+      temperature: 0.7,
+      top_p: 0.9
     })
   })
 
@@ -161,57 +145,287 @@ async function callGroq(
   const data = await response.json() as {
     choices: Array<{ message: { content: string } }>
   }
-
   const raw = data.choices[0]?.message?.content?.trim()
   if (!raw) throw new Error('Empty response from Groq')
-  // Hard safety: strip em dashes the model occasionally sneaks in
-  const reply = raw.replace(/\s*—\s*/g, ', ').replace(/—/g, ' ')
-  return reply
+  return cleanReply(raw)
 }
 
-function fallbackReply(
-  message: string,
-  agentName: string,
-  missing: ('userName' | 'gmail' | 'task')[],
+// 2. OpenAI caller
+async function callOpenAI(
+  systemPrompt: string,
+  transcript: Array<{ source: 'user' | 'agent'; text: string }>,
+  userMessage: string
+): Promise<string> {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) throw new Error('OPENAI_API_KEY not configured')
+
+  const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+    { role: 'system', content: systemPrompt }
+  ]
+  for (const item of transcript.slice(-10)) {
+    messages.push({
+      role: item.source === 'user' ? 'user' : 'assistant',
+      content: item.text
+    })
+  }
+  messages.push({ role: 'user', content: userMessage })
+
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      messages,
+      max_tokens: 150,
+      temperature: 0.7
+    })
+  })
+
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`OpenAI API error ${res.status}: ${err}`)
+  }
+
+  const data = await res.json() as {
+    choices: Array<{ message: { content: string } }>
+  }
+  const raw = data.choices[0]?.message?.content?.trim()
+  if (!raw) throw new Error('Empty response from OpenAI')
+  return cleanReply(raw)
+}
+
+// 3. Google Gemini caller
+async function callGemini(
+  apiKey: string,
+  systemPrompt: string,
+  transcript: Array<{ source: 'user' | 'agent'; text: string }>,
+  userMessage: string
+): Promise<string> {
+  const contents: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = []
+  for (const item of transcript.slice(-10)) {
+    contents.push({
+      role: item.source === 'user' ? 'user' : 'model',
+      parts: [{ text: item.text }]
+    })
+  }
+  contents.push({
+    role: 'user',
+    parts: [{ text: userMessage }]
+  })
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      contents,
+      generationConfig: { maxOutputTokens: 150, temperature: 0.7 }
+    })
+  })
+
+  if (!response.ok) {
+    const errText = await response.text()
+    throw new Error(`Gemini API error ${response.status}: ${errText}`)
+  }
+
+  const data = await response.json() as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+  }
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim()
+  if (!text) throw new Error('Empty response from Gemini')
+  return cleanReply(text)
+}
+
+// 4. Anthropic caller
+async function callAnthropic(
+  systemPrompt: string,
+  transcript: Array<{ source: 'user' | 'agent'; text: string }>,
+  userMessage: string
+): Promise<string> {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured')
+
+  const messages: Array<{ role: 'user' | 'assistant'; content: string }> = []
+  for (const item of transcript.slice(-10)) {
+    messages.push({
+      role: item.source === 'user' ? 'user' : 'assistant',
+      content: item.text
+    })
+  }
+  messages.push({ role: 'user', content: userMessage })
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'claude-3-5-haiku-20241022',
+      system: systemPrompt,
+      max_tokens: 150,
+      temperature: 0.7,
+      messages
+    })
+  })
+
+  if (!response.ok) {
+    const err = await response.text()
+    throw new Error(`Anthropic API error ${response.status}: ${err}`)
+  }
+
+  const data = await response.json() as {
+    content: Array<{ type: string; text: string }>
+  }
+  const text = data.content?.[0]?.text?.trim()
+  if (!text) throw new Error('Empty response from Anthropic')
+  return cleanReply(text)
+}
+
+/**
+ * Intelligent, context-aware fallback engine when external LLMs are unavailable or fail.
+ * Reconciles transcript history (voice + text turns), extracts candidates, and strictly follows rules.
+ */
+function intelligentFallback({
+  message,
+  agentName,
+  missing,
+  knownUserName,
+  knownTask,
+  gmailStatus,
+  transcript
+}: {
+  message: string
+  agentName: string
+  missing: ('userName' | 'gmail' | 'task')[]
   knownUserName?: string
-): string {
-  const lower = message.toLowerCase().trim()
-  const name = knownUserName ? `${knownUserName}, ` : ''
+  knownTask?: string
+  gmailStatus?: string
+  transcript: Array<{ source: 'user' | 'agent'; text: string }>
+}): string {
+  const trimmed = message.trim()
+  const lower = trimmed.toLowerCase()
+  const isAllLower = trimmed.length > 1 && trimmed === lower && !/[A-Z]/.test(trimmed)
 
-  // Refusal / skip
-  if (/^(no|nope|skip|nothing|nah|not now|no thanks|pass)\.?$/i.test(lower)) {
+  // 1. Meta / Complaints about bot style, em dashes, or robotic voice
+  if (/\b(?:em\s*dash|em-dash|dash|dashes|hyphen)\b/i.test(lower)) {
+    return cleanReply('my bad, no dashes at all. keeping it clean. what can i help you with?')
+  }
+  if (/\b(?:tf|wtf|what the fuck|fuck|fucking|shit|bullshit|trash|annoying)\b/i.test(lower)) {
+    return cleanReply("fair enough, resetting. i'm here to help you get set up. what's one thing you want me to tackle?")
+  }
+  if (/\b(?:talk normally|be normal|stop being robotic|stop robotic|robotic|sound like a human|talk like a human)\b/i.test(lower)) {
+    return cleanReply("got it, keeping it completely real. what should i call you, and what are we working on?")
+  }
+
+  // 2. Call drop / text continuity ("can you hear me", "continue", "what did you say", "i'm on text")
+  if (/\b(?:what('?s| is) my task|what task|current task)\b/i.test(lower) && knownTask) {
+    return cleanReply(`your current task is: "${knownTask}". want to adjust it?`)
+  }
+  if (/\b(?:can you hear me|hear me|hello\??|are you there|you there|what did you say|what were you saying|repeat that|switched to text|on text now|prefer text|call dropped|disconnected|continue|go on)\b/i.test(lower)) {
+    // Look at the last thing the agent said in transcript
+    const lastAgentMessage = [...transcript].reverse().find(t => t.source === 'agent')?.text.toLowerCase() ?? ''
+    if (lastAgentMessage.includes('call you') || lastAgentMessage.includes('who am i') || lastAgentMessage.includes('your name')) {
+      return cleanReply('i was asking what i should call you.')
+    }
+    if (lastAgentMessage.includes('gmail') || lastAgentMessage.includes('google') || lastAgentMessage.includes('inbox')) {
+      return cleanReply('i was asking if you wanted to link your Gmail for this demo, or we can skip it.')
+    }
+    if (lastAgentMessage.includes('help') || lastAgentMessage.includes('plate') || lastAgentMessage.includes('task')) {
+      return cleanReply("i was asking what's one thing on your plate i can help with.")
+    }
+    if (knownUserName) {
+      return cleanReply(`hey ${knownUserName}, i'm right here on text. what's one thing you want help with?`)
+    }
+    return cleanReply("i'm right here on text. what should i call you?")
+  }
+
+  // 3. Refusal or skip ("no", "skip", "nah", "nothing", "not now", "pass")
+  if (isRefusal(message) || /^(no|nope|skip|nothing|nah|not now|no thanks|pass)\.?$/i.test(lower)) {
     if (missing.includes('gmail')) {
-      const rest = missing.filter(s => s !== 'gmail')
-      if (rest.includes('task')) return `${name}all good. what's one thing you'd want help with?`
-      return `${name}got it! anything you'd like to work on together?`
+      return cleanReply("all good, we can skip Gmail for now. what's one thing you'd want help with?")
     }
-    if (missing.includes('task')) return `${name}no worries. if anything comes up, just say the word.`
-    return 'All good — I\'m here when you need me.'
+    if (missing.includes('task')) {
+      return cleanReply('no worries at all. whenever you have a task in mind, just let me know.')
+    }
+    if (missing.includes('userName')) {
+      return cleanReply("all good, no name needed. what's one thing i can help you with today?")
+    }
+    return cleanReply("all good, i'm right here whenever you need anything.")
   }
 
-  // Has a name with known name detection
+  // 4. Candidate extraction (Name, Gmail, Task)
+  const candidates = parseCandidates(message)
+  const name = candidates.userName || knownUserName
+
+  if (candidates.userName) {
+    if (candidates.task) {
+      return cleanReply(`got it, ${candidates.userName}. i noted down "${candidates.task}" and sketched out a first step on screen.`)
+    }
+    if (candidates.gmail) {
+      return cleanReply(`hey ${candidates.userName}, saved your Gmail for this demo. what's one thing on your plate i can help with?`)
+    }
+    if (missing.includes('gmail') && !['address_provided', 'connected'].includes(gmailStatus ?? '')) {
+      return cleanReply(`hey ${candidates.userName}, nice to meet you. there's a button on screen to link Gmail if you want, or what can i help you with?`)
+    }
+    if (missing.includes('task')) {
+      return cleanReply(`hey ${candidates.userName}, good to meet you. what's one task or project i can help you with?`)
+    }
+    return cleanReply(`hey ${candidates.userName}, nice to meet you. what's on your mind?`)
+  }
+
+  if (candidates.task) {
+    if (missing.includes('userName') && !name) {
+      return cleanReply('on it, i sketched out a proposed first step on screen for that. what should i call you?')
+    }
+    const namePrefix = name ? `${name}, ` : ''
+    return cleanReply(`${namePrefix}got it. i've put together a proposed first step on screen for that. take a look whenever you're ready.`)
+  }
+
+  if (candidates.gmail) {
+    return cleanReply("got your email saved for this demo. what's one thing i can help you with?")
+  }
+
+  // 5. Casual greetings & questions
+  if (/^(hi|hey|hello|yo|sup|what's up|howdy)\b/i.test(lower)) {
+    if (name) {
+      return cleanReply(`hey ${name}! what's one thing on your plate today?`)
+    }
+    return cleanReply(`hey! i'm ${agentName}. what should i call you?`)
+  }
+  if (/\b(who are you|what are you)\b/i.test(lower)) {
+    return cleanReply(`i'm ${agentName}, your personal assistant for this demo. what should i call you?`)
+  }
+  if (/\b(how are you|how's it going|how r u)\b/i.test(lower)) {
+    return cleanReply('doing great, thanks for asking. what can i help you take care of today?')
+  }
+  if (/\b(what can you do|what do you do|help me with what)\b/i.test(lower)) {
+    return cleanReply("i can help plan tasks, organize your day, or draft out next steps. what's something you're working on?")
+  }
+  if (/\b(thanks|thank you|thx|ty)\b/i.test(lower)) {
+    return cleanReply("anytime! let me know if there's anything else you want to tackle.")
+  }
+
+  // 6. Slot-driven progress default
   if (missing.includes('userName')) {
-    const capitalized = message.trim().replace(/\b\w/g, c => c.toUpperCase())
-    if (/^[a-z]{2,24}$/i.test(message.trim())) {
-      const rest = missing.filter(s => s !== 'userName')
-      if (rest.includes('gmail')) return `hey ${capitalized}! you can connect Gmail via the button on screen if you'd like. what can i help you with?`
-      if (rest.includes('task')) return `hey ${capitalized}! what's one thing on your plate i can help with?`
-      return `hey ${capitalized}, nice to officially meet you. what's on your mind?`
-    }
+    return cleanReply('what should i call you?')
+  }
+  if (missing.includes('task')) {
+    const prefix = name ? `${name}, ` : ''
+    return cleanReply(`${prefix}what's one thing on your plate i can help with?`)
+  }
+  if (missing.includes('gmail')) {
+    const prefix = name ? `${name}, ` : ''
+    return cleanReply(`${prefix}would you like to connect Gmail for this demo, or skip it?`)
   }
 
-  // Task detected
-  if (/book|plan|schedule|organize|write|draft|research|find|help|need|want/i.test(lower)) {
-    if (missing.includes('userName')) return `on it. just so i know — what should i call you?`
-    return `${name}solid, i've sketched out a first step for that on screen. nothing's done yet — want to refine it?`
-  }
-
-  // Generic off-topic
-  const nextMissing = missing[0]
-  if (nextMissing === 'userName') return 'love that energy. what should i call you though?'
-  if (nextMissing === 'gmail') return `${name}haha. anyway — want to connect Gmail via the screen button, or skip it?`
-  if (nextMissing === 'task') return `${name}lol. but seriously — what can i help you with?`
-  return `${name}i'm here. what do you need?`
+  const defaultReply = name ? `all set ${name}. what else can i help you with?` : "i'm right here. what would you like to work on?"
+  return cleanReply(isAllLower ? defaultReply.toLowerCase() : defaultReply)
 }
 
 export async function POST(request: Request) {
@@ -221,22 +435,58 @@ export async function POST(request: Request) {
   }
 
   const { message, agentName, missing, knownUserName, knownTask, gmailStatus, transcript = [] } = parsed.data
-
-  // Extract just the user's messages for style analysis
   const userMessages = transcript.filter(t => t.source === 'user').map(t => t.text)
 
-  // Try Groq first; fall back to rule-based if not configured
+  const systemPrompt = buildSystemPrompt(agentName, missing, knownUserName, knownTask, gmailStatus, userMessages)
+
+  // Try configured LLM providers in priority order
   if (process.env.GROQ_API_KEY) {
     try {
-      const systemPrompt = buildSystemPrompt(agentName, missing, knownUserName, knownTask, gmailStatus, userMessages)
       const reply = await callGroq(systemPrompt, transcript, message)
       return NextResponse.json({ reply }, { headers: { 'Cache-Control': 'no-store' } })
     } catch (err) {
-      console.error('[/api/text] Groq call failed, using fallback:', err)
-      // Fall through to rule-based fallback below
+      console.warn('[/api/text] Groq failed, trying next provider:', (err as Error).message)
     }
   }
 
-  const reply = fallbackReply(message, agentName, missing, knownUserName)
+  if (process.env.OPENAI_API_KEY) {
+    try {
+      const reply = await callOpenAI(systemPrompt, transcript, message)
+      return NextResponse.json({ reply }, { headers: { 'Cache-Control': 'no-store' } })
+    } catch (err) {
+      console.warn('[/api/text] OpenAI failed, trying next provider:', (err as Error).message)
+    }
+  }
+
+  const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
+  if (geminiKey) {
+    try {
+      const reply = await callGemini(geminiKey, systemPrompt, transcript, message)
+      return NextResponse.json({ reply }, { headers: { 'Cache-Control': 'no-store' } })
+    } catch (err) {
+      console.warn('[/api/text] Gemini failed, trying next provider:', (err as Error).message)
+    }
+  }
+
+  if (process.env.ANTHROPIC_API_KEY) {
+    try {
+      const reply = await callAnthropic(systemPrompt, transcript, message)
+      return NextResponse.json({ reply }, { headers: { 'Cache-Control': 'no-store' } })
+    } catch (err) {
+      console.warn('[/api/text] Anthropic failed, trying next provider:', (err as Error).message)
+    }
+  }
+
+  // Fallback to our high-intelligence context-aware engine
+  const reply = intelligentFallback({
+    message,
+    agentName,
+    missing,
+    knownUserName,
+    knownTask,
+    gmailStatus,
+    transcript
+  })
+
   return NextResponse.json({ reply }, { headers: { 'Cache-Control': 'no-store' } })
 }
