@@ -25,7 +25,13 @@ import {
   type OnboardingState,
   type TranscriptItem
 } from '@/lib/onboarding'
-import { playConnectTone, playEndCallTone, playIncomingRingTone } from '@/lib/audio'
+import {
+  playConnectTone,
+  playEndCallTone,
+  playIncomingRingTone,
+  playMessageReceivedSound,
+  playMessageSentSound
+} from '@/lib/audio'
 
 type VoiceStatus = 'idle' | 'connecting' | 'connected' | 'disconnecting' | 'listening' | 'speaking' | 'ended'
 
@@ -80,6 +86,18 @@ export function PersonaOnboarding() {
       }
     }
   }, [state.phase])
+
+  // Initial agent greeting when entering text mode with an empty conversation
+  useEffect(() => {
+    if (hydrated && state.channel === 'text' && state.transcript.length === 0 && state.agentName) {
+      append(dispatch, {
+        source: 'agent',
+        text: `Hey! I'm ${state.agentName}. What should I call you?`,
+        final: true
+      })
+      playMessageReceivedSound()
+    }
+  }, [hydrated, state.channel, state.transcript.length, state.agentName])
 
   // Smooth auto-scroll for iMessage transcript
   useEffect(() => {
@@ -288,6 +306,7 @@ export function PersonaOnboarding() {
     setNotice('')
     setTextInput('')
     setIsSending(true)
+    playMessageSentSound()
     append(dispatch, { source: 'user', text: message, final: true })
     applyCandidates(message)
 
@@ -311,6 +330,7 @@ export function PersonaOnboarding() {
         if (!response.ok || !body.reply) {
           throw new Error(body.error ?? 'The text reply did not arrive.')
         }
+        playMessageReceivedSound()
         append(dispatch, { source: 'agent', text: body.reply, final: true })
       }
     } catch (error) {
@@ -323,6 +343,7 @@ export function PersonaOnboarding() {
   function handleSelectGoogleAccount(email: string) {
     dispatch({ type: 'set-gmail', address: email, status: 'address_provided' })
     setIsGmailOpen(false)
+    playMessageReceivedSound()
     append(dispatch, {
       source: 'agent',
       text: `Google account linked: ${email} (Demo mode).`,
@@ -367,44 +388,78 @@ export function PersonaOnboarding() {
     )
   }
 
-  // SCREEN 2: SIMULATED INCOMING CALL
+  // SCREEN 2: SIMULATED INCOMING CALL (Full-Screen OLED iOS Phone Call)
   if (state.phase === 'ringing') {
     return (
-      <main className="page-shell" id="main-content">
-        <div className="card-container incoming-stage">
-          <div className="caller-avatar" aria-hidden="true">
-            {state.agentName.slice(0, 1).toUpperCase()}
+      <div className="ios-screen-backdrop">
+        <main className="ios-incoming-screen" id="main-content">
+          <div className="ios-incoming-top">
+            <div className="ios-incoming-avatar-wrap">
+              <div className="ios-incoming-radar-ring" />
+              <div className="ios-incoming-radar-ring delay" />
+              <div className="ios-incoming-avatar" aria-hidden="true">
+                {state.agentName.slice(0, 1).toUpperCase()}
+              </div>
+            </div>
+            <h1 className="ios-incoming-title" id="caller-title">{state.agentName}</h1>
+            <p className="ios-incoming-sub">Persona Audio…</p>
           </div>
-          <h1 id="caller-title">{state.agentName}</h1>
-          <p className="calling-sub">Persona Audio…</p>
-          <div className="call-actions-row">
+
+          {/* Apple iOS Utility Actions */}
+          <div className="ios-incoming-utilities">
             <button
-              className="circle-call-action decline"
-              onClick={() => {
-                dispatch({ type: 'choose-channel', channel: 'text' })
-              }}
+              className="ios-incoming-util-btn"
               type="button"
+              onClick={() => setNotice('Reminder set for after onboarding.')}
             >
-              <span aria-hidden="true" className="decline-icon">
-                <Phone />
-              </span>
-              <b>Decline</b>
+              <div className="ios-incoming-util-icon">
+                <Clock />
+              </div>
+              <span>Remind Me</span>
             </button>
-            <button className="circle-call-action accept" onClick={startVoice} type="button">
-              <span aria-hidden="true"><Phone /></span>
-              <b>Accept</b>
+
+            <button
+              className="ios-incoming-util-btn"
+              type="button"
+              onClick={() => dispatch({ type: 'choose-channel', channel: 'text' })}
+            >
+              <div className="ios-incoming-util-icon">
+                <MessageCircle />
+              </div>
+              <span>Message</span>
             </button>
           </div>
-          <button
-            className="secondary-text-btn"
-            onClick={() => dispatch({ type: 'choose-channel', channel: 'text' })}
-            type="button"
-          >
-            continue by text <Arrow />
-          </button>
-          {notice && <p className="notice-pill" role="status">{notice}</p>}
-        </div>
-      </main>
+
+          {/* Primary Call Actions: Decline / Accept */}
+          <div className="ios-incoming-actions">
+            <button
+              className="ios-call-action-btn decline"
+              onClick={() => dispatch({ type: 'choose-channel', channel: 'text' })}
+              type="button"
+              aria-label="Decline call and continue by text"
+            >
+              <div className="ios-action-circle decline-circle">
+                <Phone />
+              </div>
+              <span className="ios-action-label">Decline</span>
+            </button>
+
+            <button
+              className="ios-call-action-btn accept"
+              onClick={startVoice}
+              type="button"
+              aria-label={`Accept call from ${state.agentName}`}
+            >
+              <div className="ios-action-circle accept-circle">
+                <Phone />
+              </div>
+              <span className="ios-action-label">Accept</span>
+            </button>
+          </div>
+
+          {notice && <p className="notice-pill ios-notice" role="status">{notice}</p>}
+        </main>
+      </div>
     )
   }
 
@@ -414,96 +469,133 @@ export function PersonaOnboarding() {
     const latestUserSpeech = [...state.transcript].reverse().find((t) => t.source === 'user')?.text
 
     return (
-      <main className="ios-call-screen" id="main-content">
-        <div className="ios-call-top">
-          <div className="ios-call-avatar">
-            {state.agentName.slice(0, 1).toUpperCase()}
-          </div>
-          <h1 className="ios-call-title">{state.agentName}</h1>
-          <p className="ios-call-timer">
-            {voiceStatus === 'connecting'
-              ? 'connecting…'
-              : voiceStatus === 'speaking'
-              ? `${state.agentName} speaking…`
-              : formatCallDuration(callSeconds)}
-          </p>
-        </div>
-
-        {/* Live Audio Visualizer */}
-        <div className="ios-call-wave-wrap" aria-label="Voice activity">
-          <div className={`ios-call-waves ${voiceStatus === 'speaking' ? 'speaking' : 'listening'}`}>
-            {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-              <span key={i} className="ios-wave-bar" style={{ '--i': i } as CSSProperties} />
-            ))}
-          </div>
-        </div>
-
-        {/* Live Subtitle Transcript */}
-        <div className="ios-call-subtitles" aria-live="polite">
-          {latestAgentSpeech && (
-            <p className="ios-subtitle-line agent">
-              <span>{latestAgentSpeech}</span>
+      <div className="ios-screen-backdrop">
+        <main className="ios-call-screen" id="main-content">
+          <div className="ios-call-top">
+            <div className="ios-call-avatar">
+              {state.agentName.slice(0, 1).toUpperCase()}
+            </div>
+            <h1 className="ios-call-title">{state.agentName}</h1>
+            <p className="ios-call-timer">
+              {voiceStatus === 'connecting'
+                ? 'connecting…'
+                : voiceStatus === 'speaking'
+                ? `${state.agentName} speaking…`
+                : formatCallDuration(callSeconds)}
             </p>
+          </div>
+
+          {/* Live Audio Visualizer */}
+          <div className="ios-call-wave-wrap" aria-label="Voice activity">
+            <div className={`ios-call-waves ${voiceStatus === 'speaking' ? 'speaking' : 'listening'}`}>
+              {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                <span key={i} className="ios-wave-bar" style={{ '--i': i } as CSSProperties} />
+              ))}
+            </div>
+          </div>
+
+          {/* Live Subtitle Transcript */}
+          <div className="ios-call-subtitles" aria-live="polite">
+            {latestAgentSpeech ? (
+              <p className="ios-subtitle-line agent">
+                <span>{latestAgentSpeech}</span>
+              </p>
+            ) : latestUserSpeech && voiceStatus !== 'speaking' ? (
+              <p className="ios-subtitle-line user">
+                <span>{latestUserSpeech}</span>
+              </p>
+            ) : (
+              <p className="ios-subtitle-line placeholder">
+                <span>{voiceStatus === 'connecting' ? 'setting up line…' : 'listening to you…'}</span>
+              </p>
+            )}
+          </div>
+
+          {notice && <p className="notice-pill ios-notice" role="status">{notice}</p>}
+          {audioBlocked && (
+            <button className="audio-unblock-bar" onClick={restoreAudio} type="button">
+              tap to hear audio <Volume />
+            </button>
           )}
-          {latestUserSpeech && voiceStatus !== 'speaking' && (
-            <p className="ios-subtitle-line user">
-              <span>{latestUserSpeech}</span>
-            </p>
-          )}
-        </div>
 
-        {notice && <p className="notice-pill ios-notice" role="status">{notice}</p>}
-        {audioBlocked && (
-          <button className="audio-unblock-bar" onClick={restoreAudio} type="button">
-            tap to hear audio <Volume />
-          </button>
-        )}
+          {/* Apple 6-Button Keypad Grid */}
+          <div className="ios-call-keypad">
+            {/* Row 1 */}
+            <button
+              className={`ios-keypad-btn ${isMuted ? 'active' : ''}`}
+              onClick={toggleMute}
+              type="button"
+              aria-label={isMuted ? 'Unmute' : 'Mute'}
+            >
+              <div className="ios-keypad-icon">{isMuted ? <MicOff /> : <Mic />}</div>
+              <span>{isMuted ? 'unmute' : 'mute'}</span>
+            </button>
 
-        {/* Apple 6-Button Keypad Grid */}
-        <div className="ios-call-keypad">
-          <button
-            className={`ios-keypad-btn ${isMuted ? 'active' : ''}`}
-            onClick={toggleMute}
-            type="button"
-            aria-label={isMuted ? 'Unmute' : 'Mute'}
-          >
-            <div className="ios-keypad-icon">{isMuted ? <MicOff /> : <Mic />}</div>
-            <span>{isMuted ? 'unmute' : 'mute'}</span>
-          </button>
+            <button
+              className="ios-keypad-btn"
+              onClick={() => void endVoice()}
+              type="button"
+              aria-label="Messages"
+            >
+              <div className="ios-keypad-icon"><Text /></div>
+              <span>messages</span>
+            </button>
 
-          <button
-            className="ios-keypad-btn"
-            onClick={() => void endVoice()}
-            type="button"
-            aria-label="Messages"
-          >
-            <div className="ios-keypad-icon"><Text /></div>
-            <span>messages</span>
-          </button>
+            <button
+              className={`ios-keypad-btn ${audioBlocked ? 'active' : ''}`}
+              onClick={audioBlocked ? restoreAudio : undefined}
+              type="button"
+              aria-label="Speaker"
+            >
+              <div className="ios-keypad-icon"><Volume /></div>
+              <span>speaker</span>
+            </button>
 
-          <button
-            className={`ios-keypad-btn ${audioBlocked ? 'active' : ''}`}
-            onClick={audioBlocked ? restoreAudio : undefined}
-            type="button"
-            aria-label="Speaker"
-          >
-            <div className="ios-keypad-icon"><Volume /></div>
-            <span>speaker</span>
-          </button>
-        </div>
+            {/* Row 2 */}
+            <button
+              className="ios-keypad-btn"
+              type="button"
+              aria-label="Keypad"
+              onClick={() => setNotice('Voice active — speak naturally.')}
+            >
+              <div className="ios-keypad-icon"><Keypad /></div>
+              <span>keypad</span>
+            </button>
 
-        {/* End Call Button */}
-        <div className="ios-call-bottom">
-          <button
-            className="ios-end-call-btn"
-            onClick={() => void endVoice()}
-            type="button"
-            aria-label="End call"
-          >
-            <Phone />
-          </button>
-        </div>
-      </main>
+            <button
+              className="ios-keypad-btn disabled"
+              type="button"
+              aria-label="FaceTime"
+              disabled
+            >
+              <div className="ios-keypad-icon"><Video /></div>
+              <span>FaceTime</span>
+            </button>
+
+            <button
+              className="ios-keypad-btn disabled"
+              type="button"
+              aria-label="Add call"
+              disabled
+            >
+              <div className="ios-keypad-icon"><Plus /></div>
+              <span>add call</span>
+            </button>
+          </div>
+
+          {/* End Call Button */}
+          <div className="ios-call-bottom">
+            <button
+              className="ios-end-call-btn"
+              onClick={() => void endVoice()}
+              type="button"
+              aria-label="End call"
+            >
+              <Phone />
+            </button>
+          </div>
+        </main>
+      </div>
     )
   }
 
@@ -928,6 +1020,57 @@ function GoogleIcon() {
         fill="#EA4335"
         d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.24 6.58l4.04 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
       />
+    </svg>
+  )
+}
+
+function Clock() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </svg>
+  )
+}
+
+function MessageCircle() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+    </svg>
+  )
+}
+
+function Keypad() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor">
+      <circle cx="5" cy="5" r="2" />
+      <circle cx="12" cy="5" r="2" />
+      <circle cx="19" cy="5" r="2" />
+      <circle cx="5" cy="12" r="2" />
+      <circle cx="12" cy="12" r="2" />
+      <circle cx="19" cy="12" r="2" />
+      <circle cx="5" cy="19" r="2" />
+      <circle cx="12" cy="19" r="2" />
+      <circle cx="19" cy="19" r="2" />
+    </svg>
+  )
+}
+
+function Video() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="23 7 16 12 23 17 23 7" />
+      <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+    </svg>
+  )
+}
+
+function Plus() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
     </svg>
   )
 }
