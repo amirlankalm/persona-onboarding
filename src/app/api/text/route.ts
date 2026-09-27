@@ -15,12 +15,57 @@ const requestSchema = z.object({
   phase: z.enum(['naming', 'ringing', 'collecting', 'graduated']).optional()
 })
 
+function detectUserStyle(userMessages: string[]): string {
+  if (userMessages.length === 0) return ''
+
+  const all = userMessages.join(' ')
+  const signals: string[] = []
+
+  // Lowercase with no punctuation = very casual
+  const allLower = userMessages.every(m => m === m.toLowerCase())
+  const noPunctuation = userMessages.every(m => !/[.!?,;:]$/.test(m.trim()))
+  if (allLower && noPunctuation) signals.push('very casual: no caps, no punctuation — match this exactly')
+
+  // Check for slang
+  if (/\b(lol|lmao|lmfao|ngl|tbh|fr|bruh|bro|cuh|yo|yk|rn|idk|idc|imo|smh|wtf|omg|lowkey|highkey|slay|bussin|goated|cap|no cap|fam|dawg|homie|chill|vibe|dope|lit|fire)\b/i.test(all)) {
+    signals.push('uses slang/gen-z language — mirror it naturally, don\'t try too hard')
+  }
+
+  // Check for abbreviations like "u", "ur", "r", "tbh"
+  if (/\b(u|ur|r|b4|rly|thx|np|nvm|imo|irl|btw|smth|sth|cya|ty|plz|pls)\b/i.test(all)) {
+    signals.push('uses text abbreviations (u, ur, rly, etc.) — use similar shortcuts')
+  }
+
+  // Check for emojis
+  const emojiMatch = all.match(/\p{Emoji_Presentation}/gu)
+  if (emojiMatch && emojiMatch.length > 1) {
+    signals.push('uses emojis — you can use 1 emoji occasionally if it fits naturally')
+  }
+
+  // Check for all caps emphasis
+  if (/[A-Z]{2,}/.test(all)) signals.push('uses caps for emphasis — you can too sparingly')
+
+  // Formal / complete sentences
+  const hasProperCaps = userMessages.some(m => /^[A-Z]/.test(m))
+  const hasPunctuation = userMessages.some(m => /[.!?]$/.test(m.trim()))
+  if (hasProperCaps && hasPunctuation && !allLower) signals.push('writes in proper sentences — be slightly more polished in return')
+
+  // Very short messages (under 5 words)
+  const avgLen = userMessages.reduce((sum, m) => sum + m.split(' ').length, 0) / userMessages.length
+  if (avgLen < 5) signals.push('sends very short messages — keep your replies even shorter, punchy')
+
+  return signals.length > 0
+    ? `\nUSER STYLE DETECTED:\n${signals.map(s => `- ${s}`).join('\n')}\nYou MUST adapt your writing style to match theirs. If they write lowercase and short, you write lowercase and short. If they use slang, use it back. Don't be robotic, don't be formal if they aren't.`
+    : ''
+}
+
 function buildSystemPrompt(
   agentName: string,
   missing: ('userName' | 'gmail' | 'task')[],
   knownUserName?: string,
   knownTask?: string,
-  gmailStatus?: string
+  gmailStatus?: string,
+  userMessages?: string[]
 ): string {
   const userName = knownUserName ? `The user's name is ${knownUserName}.` : 'You do not yet know the user\'s name.'
   const task = knownTask ? `The user wants help with: "${knownTask}".` : 'You do not yet know what the user wants help with.'
@@ -32,13 +77,15 @@ function buildSystemPrompt(
     ? 'All slots are filled.'
     : `Still missing: ${missing.map(s => s === 'userName' ? "the user's name" : s === 'gmail' ? 'Gmail connection' : 'what the user needs help with').join(', ')}.`
 
+  const styleSection = detectUserStyle(userMessages ?? [])
+
   return `You are ${agentName}, a personal AI assistant doing a first-contact onboarding conversation via iMessage.
 
 CONTEXT:
 - ${userName}
 - ${task}
 - ${gmail}
-- ${missingStr}
+- ${missingStr}${styleSection}
 
 YOUR GOALS (collect in any order, but don't be a form):
 1. Learn the user's name if not known
@@ -48,7 +95,7 @@ YOUR GOALS (collect in any order, but don't be a form):
 
 PERSONALITY & TONE:
 - Short, casual, iMessage-style messages (1–3 sentences max)
-- Match the user's vibe — if they're casual, be casual; if professional, be professional
+- Mirror the user's exact communication style — if they're chill and lowercase, you're chill and lowercase
 - No robotic phrases like "I didn't understand" or "How can I assist you today?"
 - If they say "nothing" or seem disengaged, don't push hard — acknowledge and gently offer
 - If they're off-topic or asking meta questions, answer briefly and naturally, then nudge back
@@ -175,10 +222,13 @@ export async function POST(request: Request) {
 
   const { message, agentName, missing, knownUserName, knownTask, gmailStatus, transcript = [] } = parsed.data
 
+  // Extract just the user's messages for style analysis
+  const userMessages = transcript.filter(t => t.source === 'user').map(t => t.text)
+
   // Try Groq first; fall back to rule-based if not configured
   if (process.env.GROQ_API_KEY) {
     try {
-      const systemPrompt = buildSystemPrompt(agentName, missing, knownUserName, knownTask, gmailStatus)
+      const systemPrompt = buildSystemPrompt(agentName, missing, knownUserName, knownTask, gmailStatus, userMessages)
       const reply = await callGroq(systemPrompt, transcript, message)
       return NextResponse.json({ reply }, { headers: { 'Cache-Control': 'no-store' } })
     } catch (err) {

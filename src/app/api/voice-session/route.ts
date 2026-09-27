@@ -7,7 +7,8 @@ const requestSchema = z.object({
   agentName: z.string().trim().min(1).max(48),
   userName: z.string().trim().max(48).optional(),
   gmailStatus: z.enum(['empty', 'candidate', 'address_provided', 'connected', 'skipped']),
-  task: z.string().trim().max(500).optional()
+  task: z.string().trim().max(500).optional(),
+  userStyle: z.string().trim().max(200).optional()
 })
 
 export async function POST(request: Request) {
@@ -43,7 +44,8 @@ export async function POST(request: Request) {
         demoSessionId: state.demoSessionId,
         knownUserName: state.userName ?? '',
         gmailStatus: state.gmailStatus,
-        knownTask: state.task ?? ''
+        knownTask: state.task ?? '',
+        userStyle: state.userStyle ?? ''
       }
     }),
     cache: 'no-store'

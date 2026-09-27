@@ -229,6 +229,16 @@ export function PersonaOnboarding() {
     setVoiceStatus('connecting')
     dispatch({ type: 'choose-channel', channel: 'voice' })
     try {
+      const userMessages = state.transcript.filter(t => t.source === 'user').map(t => t.text)
+      const all = userMessages.join(' ').toLowerCase()
+      const styleHints: string[] = []
+      if (userMessages.length > 0 && userMessages.every(m => m === m.toLowerCase())) styleHints.push('casual, lowercase')
+      if (/\b(lol|lmao|fr|bruh|bro|yo|ngl|tbh|lowkey)\b/.test(all)) styleHints.push('uses slang')
+      if (/\b(u|ur|rly|thx|nvm)\b/.test(all)) styleHints.push('abbreviates words')
+      const avgWords = userMessages.length > 0 ? userMessages.reduce((s, m) => s + m.split(' ').length, 0) / userMessages.length : 5
+      if (avgWords < 4) styleHints.push('very short messages')
+      const userStyle = styleHints.length > 0 ? `User speaks: ${styleHints.join(', ')}. Mirror their style.` : ''
+
       const sessionResponse = await fetch('/api/voice-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -237,7 +247,8 @@ export function PersonaOnboarding() {
           agentName: state.agentName,
           userName: state.userName.value || undefined,
           gmailStatus: state.gmail.status,
-          task: state.task.value || undefined
+          task: state.task.value || undefined,
+          userStyle: userStyle || undefined
         })
       })
       const session = await sessionResponse.json() as { transportToken?: string; transportUrl?: string; error?: string }
@@ -431,7 +442,7 @@ export function PersonaOnboarding() {
       if (state.channel === 'voice' && conversationRef.current?.isOpen()) {
         await conversationRef.current.sendChatMessage(message)
       } else {
-        const textFetchPromise = fetch('/api/text', {
+        const response = await fetch('/api/text', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -446,12 +457,6 @@ export function PersonaOnboarding() {
           })
         })
 
-        // Authentic human conversational delay (reading + typing time): 850ms - 1300ms
-        const minTypingDuration = new Promise((resolve) =>
-          setTimeout(resolve, Math.min(1300, Math.max(850, message.length * 20)))
-        )
-
-        const [response] = await Promise.all([textFetchPromise, minTypingDuration])
         const body = (await response.json()) as { reply?: string; error?: string }
         if (!response.ok || !body.reply) {
           throw new Error(body.error ?? 'The text reply did not arrive.')
@@ -459,12 +464,8 @@ export function PersonaOnboarding() {
 
         const replyText = body.reply
 
-        // Brief finishing pause if long reply for realistic human rhythm
-        if (replyText.length > 60) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, Math.min(400, (replyText.length - 60) * 6))
-          )
-        }
+        // Very short pause after reply arrives — mimics "finishing typing" feel
+        await new Promise((resolve) => setTimeout(resolve, 120))
 
         playMessageReceivedSound()
         append(dispatch, { source: 'agent', text: replyText, final: true })
