@@ -30,7 +30,8 @@ import {
   playEndCallTone,
   playIncomingRingTone,
   playMessageReceivedSound,
-  playMessageSentSound
+  playMessageSentSound,
+  unlockAudioPlayback
 } from '@/lib/audio'
 
 type VoiceStatus = 'idle' | 'connecting' | 'connected' | 'disconnecting' | 'listening' | 'speaking' | 'ended'
@@ -130,19 +131,33 @@ export function PersonaOnboarding() {
   }, [])
 
   useEffect(() => {
-    let timer: NodeJS.Timeout | null = null
     const isLive = state.channel === 'voice' && voiceStatus !== 'ended' && voiceStatus !== 'idle'
-    if (isLive) {
-      timer = setInterval(() => {
-        setCallSeconds((prev) => prev + 1)
-      }, 1000)
-    } else {
-      setCallSeconds(0)
-    }
+    if (!isLive) return
+
+    const timer = setInterval(() => {
+      setCallSeconds((prev) => prev + 1)
+    }, 1000)
+
     return () => {
-      if (timer) clearInterval(timer)
+      clearInterval(timer)
     }
   }, [state.channel, voiceStatus])
+
+  // Automatically unblock voice audio on ANY user tap, click, or keypress
+  useEffect(() => {
+    if (!audioBlocked) return
+    const unblockOnInteraction = () => {
+      void restoreAudio()
+    }
+    window.addEventListener('click', unblockOnInteraction)
+    window.addEventListener('touchstart', unblockOnInteraction)
+    window.addEventListener('keydown', unblockOnInteraction)
+    return () => {
+      window.removeEventListener('click', unblockOnInteraction)
+      window.removeEventListener('touchstart', unblockOnInteraction)
+      window.removeEventListener('keydown', unblockOnInteraction)
+    }
+  }, [audioBlocked])
 
   const progress = useMemo(() => getSlotSummary(state), [state])
   const missing = useMemo(() => progress.filter((slot) => !slot.complete && !slot.skipped).map((slot) => {
@@ -150,6 +165,16 @@ export function PersonaOnboarding() {
     if (slot.label === 'Gmail') return 'gmail'
     return 'task'
   }), [progress])
+
+  // Show Gmail connector card only when Gmail connection is actually relevant / requested, NOT at the beginning
+  const isGmailNeeded = useMemo(() => {
+    if (state.phase === 'graduated') return false
+    if (state.gmail.status !== 'empty' && state.gmail.status !== 'candidate') return false
+    const nameHandled = state.userName.status === 'confirmed' || state.userName.status === 'skipped'
+    const candidateDetected = state.gmail.status === 'candidate'
+    const emailMentioned = state.transcript.some((t) => /\b(?:gmail|email|google|inbox)\b/i.test(t.text))
+    return nameHandled || candidateDetected || emailMentioned
+  }, [state.phase, state.gmail.status, state.userName.status, state.transcript])
 
   function nameAgent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -170,7 +195,10 @@ export function PersonaOnboarding() {
 
   async function startVoice() {
     if (conversationRef.current || voiceStatus === 'connecting' || state.agentName.length === 0) return
+    // Synchronously activate document media privileges within the click gesture
+    unlockAudioPlayback()
     playConnectTone()
+    setCallSeconds(0)
     setNotice('')
     setVoiceStatus('connecting')
     dispatch({ type: 'choose-channel', channel: 'voice' })
@@ -197,7 +225,8 @@ export function PersonaOnboarding() {
         transportUrl: session.transportUrl,
         onConnect: () => {
           setVoiceStatus('connected')
-          // Speko agent will speak firstMessage directly over audio and stream it to onTranscript
+          // Auto-resume audio immediately on connection
+          void conversation.startAudioPlayback().catch(() => {})
         },
         onDisconnect: () => {
           conversationRef.current = null
@@ -240,6 +269,8 @@ export function PersonaOnboarding() {
         onError: () => setNotice('Voice connection paused. You can try again or continue by text.')
       })
       conversationRef.current = conversation
+      // Proactively trigger startAudioPlayback in case tracks were mounted
+      void conversation.startAudioPlayback().catch(() => {})
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'Microphone connection did not start.'
       setVoiceStatus('idle')
@@ -269,6 +300,7 @@ export function PersonaOnboarding() {
       window.localStorage.removeItem(ONBOARDING_STORAGE_KEY)
     }
     setVoiceStatus('idle')
+    setCallSeconds(0)
     setLiveSpeaker(null)
     setLiveSpeechText('')
     setIsMuted(false)
@@ -286,8 +318,17 @@ export function PersonaOnboarding() {
   }
 
   async function restoreAudio() {
-    await conversationRef.current?.startAudioPlayback()
     setAudioBlocked(false)
+    try {
+      if (conversationRef.current) {
+        await conversationRef.current.startAudioPlayback()
+      }
+    } catch {}
+    if (typeof document !== 'undefined') {
+      document.querySelectorAll('audio').forEach((el) => {
+        void el.play().catch(() => {})
+      })
+    }
   }
 
   function applyCandidates(message: string) {
@@ -331,7 +372,7 @@ export function PersonaOnboarding() {
       if (conversationRef.current?.isOpen()) {
         await conversationRef.current.sendChatMessage(message)
       } else {
-        const response = await fetch('/api/text', {
+        const textFetchPromise = fetch('/api/text', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -343,12 +384,29 @@ export function PersonaOnboarding() {
             phase: state.phase
           })
         })
-        const body = await response.json() as { reply?: string; error?: string }
+
+        // Authentic human conversational delay (reading + typing time): 850ms - 1300ms
+        const minTypingDuration = new Promise((resolve) =>
+          setTimeout(resolve, Math.min(1300, Math.max(850, message.length * 20)))
+        )
+
+        const [response] = await Promise.all([textFetchPromise, minTypingDuration])
+        const body = (await response.json()) as { reply?: string; error?: string }
         if (!response.ok || !body.reply) {
           throw new Error(body.error ?? 'The text reply did not arrive.')
         }
+
+        const replyText = body.reply
+
+        // Brief finishing pause if long reply for realistic human rhythm
+        if (replyText.length > 60) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, Math.min(400, (replyText.length - 60) * 6))
+          )
+        }
+
         playMessageReceivedSound()
-        append(dispatch, { source: 'agent', text: body.reply, final: true })
+        append(dispatch, { source: 'agent', text: replyText, final: true })
       }
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Message could not be sent.')
@@ -405,76 +463,76 @@ export function PersonaOnboarding() {
     )
   }
 
-  // SCREEN 2: SIMULATED INCOMING CALL (Full-Screen OLED iOS Phone Call)
+  // SCREEN 2: SIMULATED INCOMING CALL (Full-Screen White Apple iOS Call)
   if (state.phase === 'ringing') {
     return (
       <div className="ios-screen-backdrop">
         <main className="ios-incoming-screen" id="main-content">
-          <div className="ios-incoming-top">
-            <div className="ios-incoming-avatar-wrap">
-              <div className="ios-incoming-radar-ring" />
-              <div className="ios-incoming-radar-ring delay" />
-              <div className="ios-incoming-avatar" aria-hidden="true">
-                {state.agentName.slice(0, 1).toUpperCase()}
-              </div>
-            </div>
-            <h1 className="ios-incoming-title" id="caller-title">{state.agentName}</h1>
-            <p className="ios-incoming-sub">Persona Audio…</p>
+          <div className="ios-call-top">
+            <p className="ios-call-sub-top">mobile</p>
+            <h1 className="ios-call-title" id="caller-title">{state.agentName}</h1>
           </div>
 
-          {/* Apple iOS Utility Actions */}
-          <div className="ios-incoming-utilities">
-            <button
-              className="ios-incoming-util-btn"
-              type="button"
-              onClick={() => setNotice('Reminder set for after onboarding.')}
-            >
-              <div className="ios-incoming-util-icon">
-                <Clock />
-              </div>
-              <span>Remind Me</span>
-            </button>
-
-            <button
-              className="ios-incoming-util-btn"
-              type="button"
-              onClick={() => dispatch({ type: 'choose-channel', channel: 'text' })}
-            >
-              <div className="ios-incoming-util-icon">
-                <MessageCircle />
-              </div>
-              <span>Message</span>
-            </button>
-          </div>
-
-          {/* Primary Call Actions: Decline / Accept */}
-          <div className="ios-incoming-actions">
-            <button
-              className="ios-call-action-btn decline"
-              onClick={() => dispatch({ type: 'choose-channel', channel: 'text' })}
-              type="button"
-              aria-label="Decline call and continue by text"
-            >
-              <div className="ios-action-circle decline-circle">
-                <Phone />
-              </div>
-              <span className="ios-action-label">Decline</span>
-            </button>
-
-            <button
-              className="ios-call-action-btn accept"
-              onClick={startVoice}
-              type="button"
-              aria-label={`Accept call from ${state.agentName}`}
-            >
-              <div className="ios-action-circle accept-circle">
-                <Phone />
-              </div>
-              <span className="ios-action-label">Accept</span>
-            </button>
-          </div>
+          <div className="ios-call-center-spacer" />
 
           {notice && <p className="notice-pill ios-notice" role="status">{notice}</p>}
+
+          {/* Apple iOS Incoming Call Actions matching screenshot */}
+          <div className="ios-incoming-cluster">
+            {/* Row 1: Message (left) & Remind Me (right) */}
+            <div className="ios-incoming-row">
+              <button
+                className="ios-call-round-btn"
+                onClick={() => dispatch({ type: 'choose-channel', channel: 'text' })}
+                type="button"
+                aria-label="Message"
+              >
+                <div className="ios-round-circle util">
+                  <MessageCircle />
+                </div>
+                <span className="ios-round-label">Message</span>
+              </button>
+
+              <button
+                className="ios-call-round-btn"
+                onClick={() => setNotice('Reminder set for after onboarding.')}
+                type="button"
+                aria-label="Remind Me"
+              >
+                <div className="ios-round-circle util">
+                  <Clock />
+                </div>
+                <span className="ios-round-label">Remind Me</span>
+              </button>
+            </div>
+
+            {/* Row 2: Decline (left) & Accept (right) */}
+            <div className="ios-incoming-row actions-row">
+              <button
+                className="ios-call-round-btn"
+                onClick={() => dispatch({ type: 'choose-channel', channel: 'text' })}
+                type="button"
+                aria-label="Decline call and continue by text"
+              >
+                <div className="ios-round-circle decline">
+                  <Phone />
+                </div>
+                <span className="ios-round-label">Decline</span>
+              </button>
+
+              <button
+                className="ios-call-round-btn"
+                onClick={startVoice}
+                type="button"
+                aria-label={`Accept call from ${state.agentName}`}
+              >
+                <div className="ios-round-circle accept">
+                  <Phone />
+                </div>
+                <span className="ios-round-label">Accept</span>
+              </button>
+            </div>
+          </div>
         </main>
       </div>
     )
@@ -486,204 +544,202 @@ export function PersonaOnboarding() {
       <div className="ios-screen-backdrop">
         <main className="ios-call-screen" id="main-content">
           <div className="ios-call-top">
-            <div className="ios-call-avatar">
-              {state.agentName.slice(0, 1).toUpperCase()}
-            </div>
-            <h1 className="ios-call-title">{state.agentName}</h1>
-            <p className="ios-call-timer">
+            <p className="ios-call-sub-top timer">
               {voiceStatus === 'connecting'
                 ? 'connecting…'
                 : voiceStatus === 'speaking'
                 ? `${state.agentName} speaking…`
                 : formatCallDuration(callSeconds)}
             </p>
+            <h1 className="ios-call-title">{state.agentName}</h1>
           </div>
 
-          {/* Smooth In-Call Gmail Connector Banner */}
-          <div className="ios-call-gmail-wrap">
-            {state.gmail.status === 'empty' || state.gmail.status === 'candidate' ? (
-              <div className="ios-call-gmail-card" onClick={() => setIsGmailOpen(true)} role="button" tabIndex={0}>
-                <div className="ios-call-gmail-left">
-                  <div className="ios-call-gmail-badge">
-                    <GoogleIcon />
+          {/* Smooth In-Call Gmail Connector Banner & Live Captions */}
+          <div className="ios-call-middle-area">
+            {(isGmailNeeded || state.gmail.status === 'address_provided' || state.gmail.status === 'connected') && (
+              <div className="ios-call-gmail-wrap">
+                {isGmailNeeded ? (
+                  <div className="ios-call-gmail-card" onClick={() => setIsGmailOpen(true)} role="button" tabIndex={0}>
+                    <div className="ios-call-gmail-left">
+                      <div className="ios-call-gmail-badge">
+                        <GoogleIcon />
+                      </div>
+                      <div className="ios-call-gmail-info">
+                        <span className="ios-call-gmail-title">Connect Google Account</span>
+                        <span className="ios-call-gmail-desc">Link Gmail for this demo</span>
+                      </div>
+                    </div>
+                    <div className="ios-call-gmail-right">
+                      <button
+                        className="ios-call-gmail-btn"
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setIsGmailOpen(true)
+                        }}
+                      >
+                        Connect
+                      </button>
+                      <button
+                        className="ios-call-gmail-skip"
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          dispatch({ type: 'skip', slot: 'gmail' })
+                        }}
+                        title="Skip for now"
+                        aria-label="Skip Gmail"
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
-                  <div className="ios-call-gmail-info">
-                    <span className="ios-call-gmail-title">Connect Google Account</span>
-                    <span className="ios-call-gmail-desc">Link Gmail for this demo</span>
+                ) : state.gmail.status === 'address_provided' || state.gmail.status === 'connected' ? (
+                  <div className="ios-call-gmail-card connected" onClick={() => setIsGmailOpen(true)} role="button" tabIndex={0}>
+                    <div className="ios-call-gmail-left">
+                      <div className="ios-call-gmail-badge success">
+                        <CheckIcon />
+                      </div>
+                      <div className="ios-call-gmail-info">
+                        <span className="ios-call-gmail-title">{state.gmail.address}</span>
+                        <span className="ios-call-gmail-desc">Google Account Linked</span>
+                      </div>
+                    </div>
+                    <button
+                      className="ios-call-gmail-change-btn"
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setIsGmailOpen(true)
+                      }}
+                    >
+                      Change
+                    </button>
                   </div>
-                </div>
-                <div className="ios-call-gmail-right">
-                  <button
-                    className="ios-call-gmail-btn"
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setIsGmailOpen(true)
-                    }}
-                  >
-                    Connect
-                  </button>
-                  <button
-                    className="ios-call-gmail-skip"
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      dispatch({ type: 'skip', slot: 'gmail' })
-                    }}
-                    title="Skip for now"
-                    aria-label="Skip Gmail"
-                  >
-                    ✕
-                  </button>
-                </div>
+                ) : null}
               </div>
-            ) : state.gmail.status === 'address_provided' || state.gmail.status === 'connected' ? (
-              <div className="ios-call-gmail-card connected" onClick={() => setIsGmailOpen(true)} role="button" tabIndex={0}>
-                <div className="ios-call-gmail-left">
-                  <div className="ios-call-gmail-badge success">
-                    <CheckIcon />
-                  </div>
-                  <div className="ios-call-gmail-info">
-                    <span className="ios-call-gmail-title">{state.gmail.address}</span>
-                    <span className="ios-call-gmail-desc">Google Account Linked</span>
-                  </div>
-                </div>
-                <button
-                  className="ios-call-gmail-change-btn"
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setIsGmailOpen(true)
-                  }}
-                >
-                  Change
-                </button>
+            )}
+
+            {/* Live Audio Visualizer */}
+            <div className="ios-call-wave-wrap" aria-label="Voice activity">
+              <div className={`ios-call-waves ${voiceStatus === 'speaking' ? 'speaking' : 'listening'}`}>
+                {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                  <span key={i} className="ios-wave-bar" style={{ '--i': i } as CSSProperties} />
+                ))}
               </div>
-            ) : (
-              <button
-                className="ios-call-gmail-skipped-pill"
-                type="button"
-                onClick={() => setIsGmailOpen(true)}
-              >
-                <GoogleIcon />
-                <span>Link Gmail (Optional)</span>
+            </div>
+
+            {/* Live Subtitle Transcript / Apple-Style Live Captions */}
+            <div className="ios-call-subtitles" aria-live="polite">
+              <div className="ios-captions-header">
+                <span className="ios-captions-label">Live Captions</span>
+                <span className={`ios-live-dot ${voiceStatus === 'speaking' ? 'speaking' : 'listening'}`} />
+              </div>
+
+              {liveSpeechText ? (
+                <div className="ios-caption-bubble">
+                  <span className={`ios-caption-speaker ${liveSpeaker === 'user' ? 'user' : 'agent'}`}>
+                    {liveSpeaker === 'user' ? (state.userName.value || 'You') : state.agentName}:
+                  </span>
+                  <span className="ios-caption-content">
+                    “{liveSpeechText}”
+                  </span>
+                </div>
+              ) : (
+                <div className="ios-caption-idle">
+                  <span>{voiceStatus === 'connecting' ? 'connecting audio…' : 'listening to you…'}</span>
+                </div>
+              )}
+            </div>
+
+            {notice && <p className="notice-pill ios-notice" role="status">{notice}</p>}
+            {audioBlocked && (
+              <button className="ios-audio-unblock-banner" onClick={restoreAudio} type="button">
+                <div className="ios-unblock-pulsing-icon">
+                  <Volume />
+                </div>
+                <div className="ios-unblock-details">
+                  <span className="ios-unblock-primary">Tap anywhere to hear {state.agentName}</span>
+                  <span className="ios-unblock-sub">Browser paused call audio</span>
+                </div>
               </button>
             )}
           </div>
 
-          {/* Live Audio Visualizer */}
-          <div className="ios-call-wave-wrap" aria-label="Voice activity">
-            <div className={`ios-call-waves ${voiceStatus === 'speaking' ? 'speaking' : 'listening'}`}>
-              {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-                <span key={i} className="ios-wave-bar" style={{ '--i': i } as CSSProperties} />
-              ))}
-            </div>
-          </div>
-
-          {/* Live Subtitle Transcript / Apple-Style Live Captions */}
-          <div className="ios-call-subtitles" aria-live="polite">
-            <div className="ios-captions-header">
-              <span className="ios-captions-label">Live Captions</span>
-              <span className={`ios-live-dot ${voiceStatus === 'speaking' ? 'speaking' : 'listening'}`} />
-            </div>
-
-            {liveSpeechText ? (
-              <div className="ios-caption-bubble">
-                <span className={`ios-caption-speaker ${liveSpeaker === 'user' ? 'user' : 'agent'}`}>
-                  {liveSpeaker === 'user' ? (state.userName.value || 'You') : state.agentName}:
-                </span>
-                <span className="ios-caption-content">
-                  “{liveSpeechText}”
-                </span>
-              </div>
-            ) : (
-              <div className="ios-caption-idle">
-                <span>{voiceStatus === 'connecting' ? 'connecting audio…' : 'listening to you…'}</span>
-              </div>
-            )}
-          </div>
-
-          {notice && <p className="notice-pill ios-notice" role="status">{notice}</p>}
-          {audioBlocked && (
-            <button className="audio-unblock-bar" onClick={restoreAudio} type="button">
-              tap to hear audio <Volume />
-            </button>
-          )}
-
-          {/* Apple 6-Button Keypad Grid */}
-          <div className="ios-call-keypad">
-            {/* Row 1 */}
+          {/* Apple 2x3 Keypad Grid matching Screenshot: Speaker, FaceTime, Mute | More, End, Keypad */}
+          <div className="ios-active-keypad-grid">
+            {/* Row 1: Speaker | FaceTime | Mute */}
             <button
-              className={`ios-keypad-btn ${isMuted ? 'active' : ''}`}
-              onClick={toggleMute}
-              type="button"
-              aria-label={isMuted ? 'Unmute' : 'Mute'}
-            >
-              <div className="ios-keypad-icon">{isMuted ? <MicOff /> : <Mic />}</div>
-              <span>{isMuted ? 'unmute' : 'mute'}</span>
-            </button>
-
-            <button
-              className="ios-keypad-btn"
-              onClick={() => void endVoice()}
-              type="button"
-              aria-label="Messages"
-            >
-              <div className="ios-keypad-icon"><Text /></div>
-              <span>messages</span>
-            </button>
-
-            <button
-              className={`ios-keypad-btn ${audioBlocked ? 'active' : ''}`}
-              onClick={audioBlocked ? restoreAudio : undefined}
+              className="ios-call-round-btn"
+              onClick={restoreAudio}
               type="button"
               aria-label="Speaker"
             >
-              <div className="ios-keypad-icon"><Volume /></div>
-              <span>speaker</span>
-            </button>
-
-            {/* Row 2 */}
-            <button
-              className="ios-keypad-btn"
-              type="button"
-              aria-label="Keypad"
-              onClick={() => setNotice('Voice active — speak naturally.')}
-            >
-              <div className="ios-keypad-icon"><Keypad /></div>
-              <span>keypad</span>
+              <div className="ios-round-circle util">
+                <Volume />
+              </div>
+              <span className="ios-round-label">Speaker</span>
             </button>
 
             <button
-              className="ios-keypad-btn disabled"
+              className="ios-call-round-btn disabled"
               type="button"
               aria-label="FaceTime"
               disabled
             >
-              <div className="ios-keypad-icon"><Video /></div>
-              <span>FaceTime</span>
+              <div className="ios-round-circle util disabled">
+                <Video />
+              </div>
+              <span className="ios-round-label">FaceTime</span>
             </button>
 
             <button
-              className="ios-keypad-btn disabled"
+              className="ios-call-round-btn"
+              onClick={toggleMute}
               type="button"
-              aria-label="Add call"
-              disabled
+              aria-label={isMuted ? 'Unmute' : 'Mute'}
             >
-              <div className="ios-keypad-icon"><Plus /></div>
-              <span>add call</span>
+              <div className={`ios-round-circle util ${isMuted ? 'active' : ''}`}>
+                {isMuted ? <MicOff /> : <Mic />}
+              </div>
+              <span className="ios-round-label">Mute</span>
             </button>
-          </div>
 
-          {/* End Call Button */}
-          <div className="ios-call-bottom">
+            {/* Row 2: More | End | Keypad */}
             <button
-              className="ios-end-call-btn"
+              className="ios-call-round-btn"
+              onClick={() => void endVoice()}
+              type="button"
+              aria-label="More options (continue by text)"
+            >
+              <div className="ios-round-circle util">
+                <MoreHorizontal />
+              </div>
+              <span className="ios-round-label">More</span>
+            </button>
+
+            <button
+              className="ios-call-round-btn"
               onClick={() => void endVoice()}
               type="button"
               aria-label="End call"
             >
-              <Phone />
+              <div className="ios-round-circle decline">
+                <Phone />
+              </div>
+              <span className="ios-round-label">End</span>
+            </button>
+
+            <button
+              className="ios-call-round-btn"
+              type="button"
+              onClick={() => setNotice('Voice active — speak naturally.')}
+              aria-label="Keypad"
+            >
+              <div className="ios-round-circle util">
+                <Keypad />
+              </div>
+              <span className="ios-round-label">Keypad</span>
             </button>
           </div>
 
@@ -755,8 +811,12 @@ export function PersonaOnboarding() {
         )}
 
         {state.transcript.length === 0 && state.phase !== 'graduated' ? (
-          <div className="imessage-empty-state">
-            <p>{getNextQuestion(state)}</p>
+          <div className="imessage-bubble-row received">
+            <div className="imessage-bubble bubble-gray">
+              {state.userName.value
+                ? `hey ${state.userName.value}, i'm ${state.agentName}. ${getNextQuestion(state)}`
+                : `hey, i'm ${state.agentName}. who am i speaking with?`}
+            </div>
           </div>
         ) : (
           state.transcript.map((item, idx) => {
@@ -773,8 +833,8 @@ export function PersonaOnboarding() {
           })
         )}
 
-        {/* Inline Google OAuth Action Card */}
-        {state.gmail.status === 'empty' && (
+        {/* Inline Google OAuth Action Card - only shown when Gmail connection is needed */}
+        {isGmailNeeded && (
           <div className="imessage-oauth-card" role="region" aria-label="Connect Google Account">
             <div className="oauth-card-top">
               <GoogleIcon />
@@ -1092,13 +1152,6 @@ function MicOff() {
   )
 }
 
-function Text() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-    </svg>
-  )
-}
 
 function Volume() {
   return (
@@ -1132,14 +1185,6 @@ function GoogleIcon() {
   )
 }
 
-function Clock() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10" />
-      <polyline points="12 6 12 12 16 14" />
-    </svg>
-  )
-}
 
 function MessageCircle() {
   return (
@@ -1174,19 +1219,30 @@ function Video() {
   )
 }
 
-function Plus() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="12" y1="5" x2="12" y2="19" />
-      <line x1="5" y1="12" x2="19" y2="12" />
-    </svg>
-  )
-}
 
 function CheckIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="20 6 9 17 4 12" />
+    </svg>
+  )
+}
+
+function Clock() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </svg>
+  )
+}
+
+function MoreHorizontal() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor">
+      <circle cx="5" cy="12" r="2.2" />
+      <circle cx="12" cy="12" r="2.2" />
+      <circle cx="19" cy="12" r="2.2" />
     </svg>
   )
 }

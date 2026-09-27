@@ -218,84 +218,10 @@ input:focus-visible {
   }
 }
 
-/* ==========================================================================
-   iOS Incoming Phone Call Screen (OLED Dark Immersive Interface)
-   ========================================================================== */
-.ios-screen-backdrop {
-  min-height: 100dvh;
-  width: 100%;
-  background: #000000;
-  display: flex;
-  justify-content: center;
-  align-items: stretch;
-}
-
-.ios-incoming-screen {
-  min-height: 100dvh;
-  width: 100%;
-  max-width: 440px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: space-between;
-  padding: max(3.5rem, env(safe-area-inset-top)) 1.5rem max(3.5rem, env(safe-area-inset-bottom));
-  background: radial-gradient(circle at 50% 18%, #1c1c24 0%, #000000 75%);
-  color: #ffffff;
-  position: relative;
-  overflow: hidden;
-  box-sizing: border-box;
-}
-
-.ios-incoming-top {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  margin-top: 1.5rem;
-}
-
-.ios-incoming-avatar-wrap {
-  position: relative;
-  width: 6.5rem;
-  height: 6.5rem;
-  margin: 0 auto 1.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.ios-incoming-radar-ring {
-  position: absolute;
-  inset: -14px;
-  border-radius: 50%;
-  border: 1.5px solid rgba(52, 199, 89, 0.45);
-  pointer-events: none;
-  animation: radar-wave-ios 2.6s cubic-bezier(0.16, 1, 0.3, 1) infinite;
-}
-
-.ios-incoming-radar-ring.delay {
-  animation-delay: 1.3s;
-}
-
-@keyframes radar-wave-ios {
-  0% {
-    transform: scale(0.85);
-    opacity: 0.85;
-  }
-  70% {
-    transform: scale(1.6);
-    opacity: 0;
-  }
-  100% {
-    transform: scale(1.6);
-    opacity: 0;
-  }
-}
-
-.ios-incoming-avatar {
-  width: 6.5rem;
-  height: 6.5rem;
+/* Fallback styles if browser cached legacy component markup */
+.caller-avatar {
+  width: 5.5rem;
+  height: 5.5rem;
   border-radius: 50%;
   background: #242426;
   border: 1.5px solid rgba(255, 255, 255, 0.15);
@@ -303,39 +229,27 @@ input:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 2.75rem;
+  font-size: 2.25rem;
   font-weight: 600;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6);
-  position: relative;
-  z-index: 2;
+  margin: 1.5rem auto 1rem;
 }
 
-.ios-incoming-title {
-  font-size: clamp(2.2rem, 6vw, 2.75rem);
-  font-weight: 600;
-  letter-spacing: -0.025em;
-  margin: 0 0 0.4rem;
-  color: #ffffff;
-}
-
-.ios-incoming-sub {
-  font-size: 1.05rem;
+.caller-subtitle {
+  font-size: 0.95rem;
   color: #8e8e93;
-  font-weight: 400;
-  margin: 0;
-  letter-spacing: -0.01em;
+  margin: 0.25rem 0 1.5rem;
+  text-align: center;
 }
 
-.ios-incoming-utilities {
+.call-actions-row {
   display: flex;
   align-items: center;
-  justify-content: space-around;
-  width: 100%;
-  max-width: 280px;
+  justify-content: center;
+  gap: 2.5rem;
   margin: 2rem 0;
 }
 
-.ios-incoming-util-btn {
+.circle-call-action {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -343,139 +257,78 @@ input:focus-visible {
   background: none;
   border: none;
   cursor: pointer;
-  color: #8e8e93;
-  font-size: 0.82rem;
-  font-weight: 400;
-  transition: color 150ms ease;
-}
-
-.ios-incoming-util-icon {
-  width: 3.25rem;
-  height: 3.25rem;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #ffffff;
-  transition: background 150ms ease, transform 150ms ease;
-}
-
-.ios-incoming-util-icon svg {
-  width: 1.35rem;
-  height: 1.35rem;
-}
-
-.ios-incoming-util-btn:hover {
-  color: #ffffff;
-}
-
-.ios-incoming-util-btn:hover .ios-incoming-util-icon {
-  background: rgba(255, 255, 255, 0.22);
-  transform: scale(1.05);
-}
-
-.ios-incoming-util-btn:active .ios-incoming-util-icon {
-  transform: scale(0.95);
-}
-
-.ios-incoming-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-around;
-  width: 100%;
-  max-width: 320px;
-  margin-bottom: 1.5rem;
-}
-
-.ios-call-action-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.65rem;
-  background: none;
-  border: none;
-  cursor: pointer;
-}
-
-.ios-action-circle {
-  width: 4.5rem;
-  height: 4.5rem;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #ffffff;
-  transition: transform 150ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 150ms ease;
-}
-
-.ios-action-circle svg {
-  width: 1.75rem;
-  height: 1.75rem;
-}
-
-.decline-circle {
-  background: #eb4d3d;
-  box-shadow: 0 6px 24px rgba(235, 77, 61, 0.45);
-  transform: rotate(135deg);
-}
-
-.ios-call-action-btn.decline:hover .decline-circle {
-  transform: rotate(135deg) scale(1.06);
-}
-
-.ios-call-action-btn.decline:active .decline-circle {
-  transform: rotate(135deg) scale(0.95);
-}
-
-.accept-circle {
-  background: #34c759;
-  box-shadow: 0 6px 24px rgba(52, 199, 89, 0.45);
-  animation: accept-pulse-ios 2.4s infinite cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes accept-pulse-ios {
-  0%, 100% {
-    transform: scale(1);
-    box-shadow: 0 6px 24px rgba(52, 199, 89, 0.45);
-  }
-  50% {
-    transform: scale(1.06);
-    box-shadow: 0 8px 32px rgba(52, 199, 89, 0.65);
-  }
-}
-
-.ios-call-action-btn.accept:active .accept-circle {
-  transform: scale(0.95);
-}
-
-.ios-action-label {
   font-size: 0.88rem;
   font-weight: 500;
+}
+
+.circle-call-action svg {
+  width: 3.5rem;
+  height: 3.5rem;
+  padding: 0.85rem;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.circle-call-action.decline svg {
+  background: #eb4d3d;
   color: #ffffff;
-  letter-spacing: -0.01em;
+}
+
+.circle-call-action.accept svg {
+  background: #34c759;
+  color: #ffffff;
 }
 
 /* ==========================================================================
-   iOS Phone Call Screen (Full-Screen Immersive Voice Experience)
+   iOS Incoming & Active Phone Call Screen (Clean White Apple Interface)
+   Inspired by yourpersona.com minimal craft & Apple iOS Phone UI
    ========================================================================== */
-.ios-call-screen {
+.ios-screen-backdrop {
   min-height: 100dvh;
   width: 100%;
-  max-width: 440px;
+  background: #f4f4f6; /* Soft Apple studio desktop backdrop */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 2rem 1rem;
+  box-sizing: border-box;
+}
+
+.ios-incoming-screen,
+.ios-call-screen {
+  min-height: min(840px, 94dvh);
+  width: 100%;
+  max-width: 410px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
-  padding: max(3.5rem, env(safe-area-inset-top)) 1.5rem max(3rem, env(safe-area-inset-bottom));
-  background: radial-gradient(circle at 50% 18%, #1c1c24 0%, #000000 75%);
-  color: #ffffff;
+  padding: 3.5rem 1.75rem 3rem;
+  background: #ffffff;
+  color: #09090b;
   position: relative;
   overflow: hidden;
   box-sizing: border-box;
+  border-radius: 48px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 25px 64px -12px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.04);
+}
+
+@media (max-width: 640px) {
+  .ios-screen-backdrop {
+    padding: 0;
+    background: #ffffff;
+  }
+  .ios-incoming-screen,
+  .ios-call-screen {
+    min-height: 100dvh;
+    max-width: 100%;
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+    padding: max(3.5rem, env(safe-area-inset-top)) 1.5rem max(2.5rem, env(safe-area-inset-bottom));
+  }
 }
 
 .ios-call-top {
@@ -483,46 +336,175 @@ input:focus-visible {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  margin-top: 1rem;
+  margin-top: 1.25rem;
+  width: 100%;
 }
 
-.ios-call-avatar {
-  width: 5.5rem;
-  height: 5.5rem;
-  border-radius: 50%;
-  background: #1c1c1e;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #ffffff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 2.2rem;
-  font-weight: 600;
-  margin-bottom: 1.25rem;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+.ios-call-sub-top {
+  font-size: 1.05rem;
+  color: #8e8e93;
+  font-weight: 500;
+  margin: 0 0 0.25rem;
+  letter-spacing: -0.01em;
+}
+
+.ios-call-sub-top.timer {
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
 }
 
 .ios-call-title {
-  font-size: 1.85rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  margin: 0 0 0.35rem;
+  font-size: clamp(2.2rem, 5.5vw, 2.75rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  margin: 0;
+  color: #09090b;
+  line-height: 1.15;
+}
+
+.ios-call-center-spacer {
+  flex: 1;
+  min-height: 2rem;
+}
+
+.ios-call-middle-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  margin: auto 0;
+}
+
+/* Apple iOS Incoming Call Cluster matching screenshot */
+.ios-incoming-cluster {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 320px;
+  margin-bottom: 1.5rem;
+}
+
+.ios-incoming-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0 1.25rem;
+  box-sizing: border-box;
+}
+
+.ios-incoming-row.actions-row {
+  margin-top: 2.75rem;
+}
+
+/* Common Circular Button Style */
+.ios-call-round-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 120ms ease;
+}
+
+.ios-call-round-btn:active:not(.disabled) {
+  transform: scale(0.94);
+}
+
+.ios-call-round-btn.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ios-round-circle {
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 150ms ease;
+}
+
+.ios-round-circle.util {
+  background: #f2f2f7;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  color: #1c1c1e;
+}
+
+.ios-round-circle.util.active {
+  background: #1c1c1e;
   color: #ffffff;
 }
 
-.ios-call-timer {
-  font-size: 0.95rem;
-  font-family: var(--font-mono);
+.ios-round-circle.util.disabled {
+  background: #f2f2f7;
   color: #8e8e93;
-  margin: 0;
+}
+
+.ios-call-round-btn:hover:not(.disabled) .ios-round-circle.util {
+  background: #e5e5ea;
+}
+
+.ios-round-circle.decline {
+  background: #ff3b30;
+  color: #ffffff;
+  box-shadow: 0 6px 20px rgba(255, 59, 48, 0.3);
+}
+
+.ios-round-circle.decline svg {
+  transform: rotate(135deg);
+}
+
+.ios-call-round-btn:hover .ios-round-circle.decline {
+  background: #e02b21;
+}
+
+.ios-round-circle.accept {
+  background: #34c759;
+  color: #ffffff;
+  box-shadow: 0 6px 20px rgba(52, 199, 89, 0.3);
+}
+
+.ios-call-round-btn:hover .ios-round-circle.accept {
+  background: #2eb34f;
+}
+
+.ios-round-circle svg {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.ios-round-label {
+  font-size: 0.8rem;
   font-weight: 500;
+  color: #71717a;
+  letter-spacing: -0.01em;
+  text-align: center;
+}
+
+/* Active 2x3 Keypad Grid */
+.ios-active-keypad-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  row-gap: 1.65rem;
+  column-gap: 1.5rem;
+  width: 100%;
+  max-width: 320px;
+  margin-bottom: 1.25rem;
+  justify-items: center;
 }
 
 /* Smooth In-Call Gmail Connector Banner */
 .ios-call-gmail-wrap {
   width: 100%;
-  max-width: 380px;
-  margin: 0.85rem 0 0.25rem;
+  max-width: 360px;
+  margin: 0.75rem 0 0.25rem;
+  animation: modal-scale-in 220ms var(--ease) both;
 }
 
 .ios-call-gmail-card {
@@ -530,19 +512,17 @@ input:focus-visible {
   align-items: center;
   justify-content: space-between;
   padding: 0.65rem 0.85rem;
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  background: #ffffff;
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid #e5e5ea;
   cursor: pointer;
   transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
 }
 
 .ios-call-gmail-card:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: #f9f9fa;
+  border-color: #d1d1d6;
   transform: translateY(-1px);
 }
 
@@ -551,8 +531,8 @@ input:focus-visible {
 }
 
 .ios-call-gmail-card.connected {
-  background: rgba(52, 199, 89, 0.12);
-  border-color: rgba(52, 199, 89, 0.3);
+  background: #f0fdf4;
+  border-color: #bbf7d0;
 }
 
 .ios-call-gmail-left {
@@ -567,17 +547,18 @@ input:focus-visible {
   width: 2.25rem;
   height: 2.25rem;
   border-radius: 50%;
-  background: #ffffff;
+  background: #f4f4f5;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  border: 1px solid #e5e5ea;
 }
 
 .ios-call-gmail-badge.success {
   background: #34c759;
   color: #ffffff;
+  border-color: transparent;
 }
 
 .ios-call-gmail-info {
@@ -589,7 +570,7 @@ input:focus-visible {
 .ios-call-gmail-title {
   font-size: 0.86rem;
   font-weight: 600;
-  color: #ffffff;
+  color: #09090b;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -597,11 +578,11 @@ input:focus-visible {
 
 .ios-call-gmail-desc {
   font-size: 0.73rem;
-  color: #8e8e93;
+  color: #71717a;
 }
 
 .ios-call-gmail-card.connected .ios-call-gmail-desc {
-  color: #34c759;
+  color: #16a34a;
   font-weight: 500;
 }
 
@@ -615,8 +596,8 @@ input:focus-visible {
 .ios-call-gmail-btn {
   padding: 0.35rem 0.8rem;
   border-radius: 9999px;
-  background: #ffffff;
-  color: #000000;
+  background: #09090b;
+  color: #ffffff;
   font-size: 0.76rem;
   font-weight: 600;
   border: none;
@@ -636,7 +617,7 @@ input:focus-visible {
   width: 1.65rem;
   height: 1.65rem;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.1);
+  background: #f2f2f7;
   color: #8e8e93;
   border: none;
   font-size: 0.7rem;
@@ -648,52 +629,32 @@ input:focus-visible {
 }
 
 .ios-call-gmail-skip:hover {
-  background: rgba(255, 255, 255, 0.2);
-  color: #ffffff;
+  background: #e5e5ea;
+  color: #1c1c1e;
 }
 
 .ios-call-gmail-change-btn {
   padding: 0.3rem 0.65rem;
   border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.12);
-  color: #ffffff;
+  background: #f2f2f7;
+  color: #1c1c1e;
   font-size: 0.74rem;
   font-weight: 500;
-  border: none;
+  border: 1px solid #e5e5ea;
   cursor: pointer;
   transition: background 120ms ease;
 }
 
 .ios-call-gmail-change-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.ios-call-gmail-skipped-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.35rem 0.85rem;
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #8e8e93;
-  font-size: 0.78rem;
-  cursor: pointer;
-  margin: 0 auto;
-  transition: all 120ms ease;
-}
-
-.ios-call-gmail-skipped-pill:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: #ffffff;
+  background: #e5e5ea;
 }
 
 .ios-call-wave-wrap {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 2.75rem;
-  margin: 1.25rem 0 1rem;
+  height: 2.5rem;
+  margin: 1rem 0 0.85rem;
 }
 
 .ios-call-waves {
@@ -717,7 +678,7 @@ input:focus-visible {
 }
 
 .ios-call-waves.listening .ios-wave-bar {
-  background: #8e8e93;
+  background: #a1a1aa;
   animation: ios-wave-subtle 1.8s ease-in-out infinite alternate;
   animation-delay: calc(var(--i) * -140ms);
 }
@@ -735,19 +696,18 @@ input:focus-visible {
 /* Live Apple-Style Subtitles / Live Captions */
 .ios-call-subtitles {
   width: 100%;
-  max-width: 380px;
-  min-height: 5.25rem;
+  max-width: 360px;
+  min-height: 5rem;
   display: flex;
   flex-direction: column;
   justify-content: center;
   padding: 0.75rem 1rem;
-  background: rgba(255, 255, 255, 0.07);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  background: #f8f8f9;
   border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  margin-bottom: 2rem;
+  border: 1px solid #e5e5ea;
+  margin-bottom: 1.75rem;
   box-sizing: border-box;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
 }
 
 .ios-captions-header {
@@ -793,18 +753,18 @@ input:focus-visible {
 }
 
 .ios-caption-speaker.user {
-  color: #34c759;
+  color: #16a34a;
 }
 
 .ios-caption-speaker.agent {
-  color: #a1a1aa;
+  color: #71717a;
 }
 
 .ios-caption-content {
   font-size: 0.95rem;
   line-height: 1.4;
-  color: #ffffff;
-  font-weight: 450;
+  color: #09090b;
+  font-weight: 500;
   word-break: break-word;
 }
 
@@ -816,111 +776,6 @@ input:focus-visible {
   padding: 0.25rem 0;
 }
 
-.ios-call-keypad {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1.75rem 1.25rem;
-  width: 100%;
-  max-width: 320px;
-  margin-bottom: 2.5rem;
-}
-
-.ios-keypad-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-  color: #ffffff;
-  background: none;
-  border: none;
-  cursor: pointer;
-}
-
-.ios-keypad-btn.disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.ios-keypad-btn.disabled .ios-keypad-icon {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.04);
-}
-
-.ios-keypad-icon {
-  width: 4.25rem;
-  height: 4.25rem;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #ffffff;
-  transition: all 120ms ease;
-}
-
-.ios-keypad-btn:not(.disabled):active .ios-keypad-icon {
-  transform: scale(0.94);
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.ios-keypad-btn.active .ios-keypad-icon {
-  background: #ffffff;
-  color: #000000;
-}
-
-.ios-keypad-icon svg {
-  width: 1.45rem;
-  height: 1.45rem;
-}
-
-.ios-keypad-btn span {
-  font-size: 0.78rem;
-  color: #ffffff;
-  text-transform: capitalize;
-  letter-spacing: -0.01em;
-}
-
-.ios-keypad-btn.disabled span {
-  color: #8e8e93;
-}
-
-.ios-call-bottom {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  margin-bottom: 1rem;
-}
-
-.ios-end-call-btn {
-  width: 4.5rem;
-  height: 4.5rem;
-  border-radius: 50%;
-  background: #eb4d3d;
-  color: #ffffff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transform: rotate(135deg);
-  box-shadow: 0 4px 16px rgba(235, 77, 61, 0.35);
-  transition: transform 120ms ease, opacity 120ms ease;
-}
-
-.ios-end-call-btn:hover {
-  opacity: 0.92;
-}
-
-.ios-end-call-btn:active {
-  transform: rotate(135deg) scale(0.94);
-}
-
-.ios-end-call-btn svg {
-  width: 1.75rem;
-  height: 1.75rem;
-}
 
 .ios-notice {
   color: #ff9f0a;
@@ -1100,15 +955,19 @@ input:focus-visible {
   gap: 5px;
   padding: 0.75rem 1rem !important;
   width: fit-content;
-  min-height: 2.15rem;
+  min-height: 2.2rem;
+  border-radius: 18px;
+  border-bottom-left-radius: 4px;
+  background: #e9e9eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .typing-dot {
-  width: 7px;
-  height: 7px;
+  width: 7.5px;
+  height: 7.5px;
   border-radius: 50%;
   background: #8e8e93;
-  animation: typing-dot-bounce 1.3s infinite ease-in-out both;
+  animation: typing-dot-bounce 1.35s infinite ease-in-out both;
 }
 
 .typing-dot:nth-child(1) { animation-delay: -0.32s; }
@@ -1117,11 +976,11 @@ input:focus-visible {
 
 @keyframes typing-dot-bounce {
   0%, 80%, 100% {
-    transform: scale(0.6);
-    opacity: 0.35;
+    transform: translateY(0) scale(0.75);
+    opacity: 0.4;
   }
   40% {
-    transform: scale(1);
+    transform: translateY(-5px) scale(1);
     opacity: 1;
   }
 }
@@ -1366,6 +1225,91 @@ input:focus-visible {
   line-height: 1.4;
   margin: 0.5rem 0 0;
   text-align: center;
+}
+
+/* iOS Live Call Audio Unblock Banner */
+.ios-audio-unblock-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  color: #09090b;
+  padding: 0.6rem 1.15rem;
+  border-radius: 9999px;
+  margin: 0.65rem auto;
+  cursor: pointer;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04);
+  animation: banner-float-pulse 2.2s infinite cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 150ms ease, background 150ms ease, box-shadow 150ms ease;
+  width: fit-content;
+  max-width: 90%;
+}
+
+.ios-audio-unblock-banner:hover {
+  background: #fbfbfb;
+  transform: scale(1.02);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.12);
+}
+
+.ios-unblock-pulsing-icon {
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 50%;
+  background: #34c759;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  flex-shrink: 0;
+  box-shadow: 0 0 10px rgba(52, 199, 89, 0.4);
+}
+
+.ios-unblock-pulsing-icon svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.ios-unblock-details {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.ios-unblock-primary {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #09090b;
+  letter-spacing: -0.01em;
+}
+
+.ios-unblock-sub {
+  font-size: 0.7rem;
+  color: #8e8e93;
+}
+
+@keyframes banner-float-pulse {
+  0%, 100% {
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08), 0 0 0 0 rgba(52, 199, 89, 0.4);
+  }
+  50% {
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12), 0 0 0 6px rgba(52, 199, 89, 0);
+  }
+}
+
+.ios-keypad-btn.alert-pulse .ios-keypad-icon {
+  box-shadow: 0 0 0 3px rgba(52, 199, 89, 0.5);
+  animation: keypad-alert-pulse 1.8s infinite;
+}
+
+@keyframes keypad-alert-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(52, 199, 89, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(52, 199, 89, 0);
+  }
 }
 
 .audio-unblock-bar {

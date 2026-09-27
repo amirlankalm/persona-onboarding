@@ -26,6 +26,39 @@ function getAudioContext(): AudioContext | null {
   }
 }
 
+let dummyAudioElement: HTMLAudioElement | null = null
+
+/**
+ * Synchronously activates browser media playback permissions within a user gesture.
+ * Crucial for WebRTC audio playback on modern Chrome/Safari autoplay policies.
+ */
+export function unlockAudioPlayback(): void {
+  if (typeof window === 'undefined') return
+  try {
+    const ctx = getAudioContext()
+    if (ctx && ctx.state === 'suspended') {
+      void ctx.resume()
+    }
+
+    if (!dummyAudioElement) {
+      dummyAudioElement = document.createElement('audio')
+      dummyAudioElement.id = 'speko-audio-unlocker'
+      dummyAudioElement.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA'
+      dummyAudioElement.volume = 0.001
+      dummyAudioElement.setAttribute('playsinline', '')
+      document.body.appendChild(dummyAudioElement)
+    }
+    const p = dummyAudioElement.play()
+    if (p !== undefined) {
+      p.then(() => {
+        dummyAudioElement?.pause()
+      }).catch(() => {})
+    }
+  } catch {
+    // Autoplay restrictions are handled by fallback gestures
+  }
+}
+
 /**
  * Plays a calm, elegant incoming phone ring chime (D5 -> F#5 -> A5).
  * Repeats every 2.8s until the returned cleanup callback is invoked.
