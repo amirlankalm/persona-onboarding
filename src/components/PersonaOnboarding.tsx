@@ -185,15 +185,19 @@ export function PersonaOnboarding() {
     return 'task'
   }), [progress])
 
-  // Show Gmail connector card only when Gmail connection is actually relevant / requested, NOT at the beginning
+  // Show Gmail connector card only when:
+  // 1. Gmail slot is empty or candidate (not already provided/skipped/connected)
+  // 2. AND the agent or user has actually mentioned Gmail/email in the conversation
+  // 3. OR a gmail candidate has been detected
+  // This prevents the card from appearing before the agent naturally brings it up
   const isGmailNeeded = useMemo(() => {
     if (state.phase === 'graduated') return false
     if (state.gmail.status !== 'empty' && state.gmail.status !== 'candidate') return false
-    const nameHandled = state.userName.status === 'confirmed' || state.userName.status === 'skipped'
+    // Only show if email/gmail has been mentioned in conversation, or candidate detected
     const candidateDetected = state.gmail.status === 'candidate'
-    const emailMentioned = state.transcript.some((t) => /\b(?:gmail|email|google|inbox)\b/i.test(t.text))
-    return nameHandled || candidateDetected || emailMentioned
-  }, [state.phase, state.gmail.status, state.userName.status, state.transcript])
+    const gmailMentioned = state.transcript.some((t) => /\b(?:gmail|email|google|inbox)\b/i.test(t.text))
+    return candidateDetected || gmailMentioned
+  }, [state.phase, state.gmail.status, state.transcript])
 
   function nameAgent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -446,6 +450,8 @@ export function PersonaOnboarding() {
             missing,
             knownUserName: state.userName.value || undefined,
             knownTask: state.task.value || undefined,
+            gmailStatus: state.gmail.status,
+            transcript: state.transcript.slice(-12).map(t => ({ source: t.source, text: t.text })),
             phase: state.phase
           })
         })
