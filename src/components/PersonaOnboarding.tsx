@@ -60,7 +60,6 @@ export function PersonaOnboarding() {
   const [hydrated, setHydrated] = useState(false)
   const [agentNameInput, setAgentNameInput] = useState('')
   const [textInput, setTextInput] = useState('')
-  const [gmailInput, setGmailInput] = useState('')
   const [isGmailOpen, setIsGmailOpen] = useState(false)
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>('idle')
   const [isMuted, setIsMuted] = useState(false)
@@ -241,7 +240,6 @@ export function PersonaOnboarding() {
     setNotice('')
     setAgentNameInput('')
     setTextInput('')
-    setGmailInput('')
     setIsGmailOpen(false)
     dispatch({ type: 'reset' })
   }
@@ -322,18 +320,12 @@ export function PersonaOnboarding() {
     }
   }
 
-  function saveGmail(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!isGmailAddress(gmailInput)) {
-      setNotice('Please provide a valid Gmail address (name@gmail.com).')
-      return
-    }
-    dispatch({ type: 'set-gmail', address: gmailInput, status: 'address_provided' })
-    setGmailInput('')
+  function handleSelectGoogleAccount(email: string) {
+    dispatch({ type: 'set-gmail', address: email, status: 'address_provided' })
     setIsGmailOpen(false)
     append(dispatch, {
       source: 'agent',
-      text: 'Got it. Address saved for this demo—not connected to your inbox.',
+      text: `Google account linked: ${email} (Demo mode).`,
       final: true
     })
   }
@@ -550,9 +542,6 @@ export function PersonaOnboarding() {
         </button>
       </header>
 
-      {/* Progress metadata pill */}
-      <ProgressStrip progress={progress} onGmail={() => setIsGmailOpen(true)} />
-
       {/* iMessage Message Stream */}
       <section className="imessage-transcript" aria-live="polite" aria-label="Messages">
         {state.phase === 'graduated' && (
@@ -582,6 +571,36 @@ export function PersonaOnboarding() {
               </div>
             )
           })
+        )}
+
+        {/* Inline Google OAuth Action Card */}
+        {state.gmail.status === 'empty' && (
+          <div className="imessage-oauth-card" role="region" aria-label="Connect Google Account">
+            <div className="oauth-card-top">
+              <GoogleIcon />
+              <div className="oauth-card-info">
+                <span className="oauth-card-title">Google Account</span>
+                <span className="oauth-card-desc">Sign in with Google to link Gmail for this demo</span>
+              </div>
+            </div>
+            <div className="oauth-card-actions">
+              <button
+                className="google-signin-btn"
+                onClick={() => setIsGmailOpen(true)}
+                type="button"
+              >
+                <GoogleIcon />
+                <span>Sign in with Google</span>
+              </button>
+              <button
+                className="oauth-skip-btn"
+                onClick={() => dispatch({ type: 'skip', slot: 'gmail' })}
+                type="button"
+              >
+                skip
+              </button>
+            </div>
+          </div>
         )}
 
         {isSending && (
@@ -622,11 +641,10 @@ export function PersonaOnboarding() {
       </form>
 
       {isGmailOpen && (
-        <GmailModal
-          gmailInput={gmailInput}
-          onChange={setGmailInput}
+        <GoogleOAuthModal
+          userName={state.userName.value}
           onClose={() => setIsGmailOpen(false)}
-          onSave={saveGmail}
+          onSelectAccount={handleSelectGoogleAccount}
           onSkip={() => {
             dispatch({ type: 'skip', slot: 'gmail' })
             setIsGmailOpen(false)
@@ -634,35 +652,6 @@ export function PersonaOnboarding() {
         />
       )}
     </main>
-  )
-}
-
-function ProgressStrip({
-  progress,
-  onGmail
-}: {
-  progress: ReturnType<typeof getSlotSummary>
-  onGmail: () => void
-}) {
-  return (
-    <nav className="progress-strip" aria-label="Onboarding progress">
-      {progress.map((slot) => {
-        const isGmail = slot.label === 'Gmail'
-        return (
-          <button
-            key={slot.label}
-            className={`chip ${slot.complete ? 'complete' : ''} ${slot.skipped ? 'skipped' : ''} ${isGmail ? 'clickable' : ''}`}
-            onClick={isGmail ? onGmail : undefined}
-            type="button"
-            disabled={!isGmail}
-            aria-label={`${slot.label}: ${slot.complete ? 'Completed' : slot.skipped ? 'Skipped' : 'Pending'}`}
-          >
-            <span>{slot.complete ? '✓' : slot.skipped ? '—' : '○'}</span>
-            {slot.label}
-          </button>
-        )
-      })}
-    </nav>
   )
 }
 
@@ -714,19 +703,25 @@ function GraduationCard({
   )
 }
 
-function GmailModal({
-  gmailInput,
-  onChange,
+function GoogleOAuthModal({
+  userName,
   onClose,
-  onSave,
+  onSelectAccount,
   onSkip
 }: {
-  gmailInput: string
-  onChange: (value: string) => void
+  userName: string
   onClose: () => void
-  onSave: (event: FormEvent<HTMLFormElement>) => void
+  onSelectAccount: (email: string) => void
   onSkip: () => void
 }) {
+  const [isConnecting, setIsConnecting] = useState(false)
+  const [showCustomInput, setShowCustomInput] = useState(false)
+  const [customEmail, setCustomEmail] = useState('')
+  const [error, setError] = useState('')
+
+  const displayName = userName.trim() || 'Amirlan Kalmukhan'
+  const defaultEmail = 'amirlankalmukhan1@gmail.com'
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -735,37 +730,116 @@ function GmailModal({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [onClose])
 
+  function handleChooseDefault() {
+    setIsConnecting(true)
+    setTimeout(() => {
+      onSelectAccount(defaultEmail)
+    }, 600)
+  }
+
+  function handleCustomSubmit(e: FormEvent) {
+    e.preventDefault()
+    if (!isGmailAddress(customEmail)) {
+      setError('Please enter a valid Gmail address (name@gmail.com)')
+      return
+    }
+    setIsConnecting(true)
+    setTimeout(() => {
+      onSelectAccount(customEmail.trim().toLowerCase())
+    }, 500)
+  }
+
   return (
-    <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-gmail-title">
-      <div className="modal-card">
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="google-auth-title">
+      <div className="google-oauth-box">
         <button className="modal-close-btn" onClick={onClose} type="button" aria-label="Close modal">
           ×
         </button>
-        <h2 id="modal-gmail-title">Add Gmail address</h2>
-        <p className="modal-desc">
-          This saves an address for the demo only. It does not connect Gmail or grant inbox access.
-        </p>
-        <form className="modal-form" onSubmit={onSave}>
-          <label className="sr-only" htmlFor="gmail-modal-input">Gmail address</label>
-          <input
-            id="gmail-modal-input"
-            type="email"
-            inputMode="email"
-            autoFocus
-            onChange={(e) => onChange(e.target.value)}
-            placeholder="name@gmail.com"
-            value={gmailInput}
-            className="modal-input"
-          />
-          <div className="modal-actions">
-            <button className="secondary-text-btn" onClick={onSkip} type="button">
-              skip for now
-            </button>
-            <button className="primary-pill-btn" type="submit" disabled={!gmailInput.trim()}>
-              save <Arrow />
-            </button>
+
+        <div className="google-header">
+          <GoogleIcon />
+          <h2 id="google-auth-title">Sign in with Google</h2>
+          <p className="google-subtitle">Choose an account to continue to <b>Persona</b></p>
+        </div>
+
+        {isConnecting ? (
+          <div className="google-connecting-state">
+            <div className="google-spinner" />
+            <p>Connecting Google Account…</p>
           </div>
-        </form>
+        ) : !showCustomInput ? (
+          <div className="google-accounts-list">
+            <button className="google-account-row" onClick={handleChooseDefault} type="button">
+              <div className="google-avatar-circle">
+                {displayName.slice(0, 1).toUpperCase()}
+              </div>
+              <div className="google-account-details">
+                <span className="google-account-name">{displayName}</span>
+                <span className="google-account-email">{defaultEmail}</span>
+              </div>
+            </button>
+
+            <button
+              className="google-account-row add-account"
+              onClick={() => setShowCustomInput(true)}
+              type="button"
+            >
+              <div className="google-avatar-circle add">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </div>
+              <div className="google-account-details">
+                <span className="google-account-name">Use another account</span>
+                <span className="google-account-email">Enter a different Gmail address</span>
+              </div>
+            </button>
+
+            <div className="google-footer-notice">
+              <p>Demo placeholder: saves address to Persona demo state without requesting Google OAuth scopes.</p>
+              <button className="secondary-text-btn" onClick={onSkip} style={{ margin: '0.65rem auto 0' }} type="button">
+                skip for now
+              </button>
+            </div>
+          </div>
+        ) : (
+          <form className="google-custom-form" onSubmit={handleCustomSubmit}>
+            <label className="google-input-label" htmlFor="custom-gmail-input">
+              Enter your Gmail address
+            </label>
+            <input
+              id="custom-gmail-input"
+              type="email"
+              inputMode="email"
+              autoFocus
+              autoComplete="email"
+              placeholder="name@gmail.com"
+              value={customEmail}
+              onChange={(e) => {
+                setCustomEmail(e.target.value)
+                setError('')
+              }}
+              className="modal-input"
+            />
+            {error && <p className="google-error-text">{error}</p>}
+            <div className="google-form-actions">
+              <button
+                className="secondary-text-btn"
+                onClick={() => setShowCustomInput(false)}
+                type="button"
+              >
+                ‹ Back
+              </button>
+              <button
+                className="primary-pill-btn"
+                type="submit"
+                disabled={!customEmail.trim()}
+              >
+                continue <Arrow />
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   )
@@ -831,6 +905,29 @@ function Volume() {
     <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
       <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
       <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
+    </svg>
+  )
+}
+
+function GoogleIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18">
+      <path
+        fill="#4285F4"
+        d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.67v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.16z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.24v3.15C3.26 21.36 7.33 24 12 24z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.24C.45 8.16 0 9.97 0 12s.45 3.84 1.24 5.42l4.04-3.15z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.24 6.58l4.04 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+      />
     </svg>
   )
 }
