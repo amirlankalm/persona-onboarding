@@ -68,8 +68,13 @@ function buildSystemPrompt(
 ): string {
   const userName = knownUserName ? `User name: "${knownUserName}".` : 'User name: not known yet.'
   const task = knownTask ? `User task: "${knownTask}".` : 'User task: not known yet.'
-  const gmail = gmailStatus && gmailStatus !== 'empty'
-    ? `Gmail status: ${gmailStatus}.`
+  const gmailDone = ['address_provided', 'connected', 'skipped'].includes(gmailStatus ?? '')
+  const gmail = gmailStatus === 'connected'
+    ? 'Gmail: connected (OAuth complete).'
+    : gmailStatus === 'address_provided'
+    ? 'Gmail: address provided by user in demo mode (not OAuth-connected, no inbox access).'
+    : gmailStatus === 'skipped'
+    ? 'Gmail: user skipped this.'
     : 'Gmail: not linked yet.'
 
   const missingStr = missing.length === 0
@@ -89,8 +94,7 @@ CURRENT STATE:
 
 OBJECTIVES (in any natural order):
 1. Know what to call the user (if not already known).
-2. Learn one thing you can help them with.
-3. Mention that Gmail can be connected via the button on screen (or skip it).
+2. Learn one thing you can help them with.${!gmailDone ? '\n3. Mention that Gmail can be connected via the button on screen (or skip it).' : ''}
 
 STRICT RULES:
 - Never use em dashes (—) or en dashes (–). NEVER use them. Use commas or periods instead.
@@ -98,6 +102,7 @@ STRICT RULES:
 - No bullet points, lists, or markdown.
 - No canned AI filler ("Sure!", "Of course!", "How can I assist you?", "Love that energy", "haha. anyway").
 - Never claim you sent an email, booked a flight, or accessed an external service you haven't accessed.
+- If Gmail is already provided or skipped, DO NOT mention Gmail or ask about it again.
 - If the user gave a task, acknowledge it and reference the proposed first step on screen.
 - If the user asks about the conversation, switches from a call, or complains, react like a real human: apologize simply and adapt immediately.`
 }
@@ -461,7 +466,7 @@ function intelligentFallback({
     const prefix = name ? `${name}, ` : ''
     return cleanReply(`${prefix}what's one thing on your plate i can help with?`)
   }
-  if (missing.includes('gmail')) {
+  if (missing.includes('gmail') && !['address_provided', 'connected', 'skipped'].includes(gmailStatus ?? '')) {
     const prefix = name ? `${name}, ` : ''
     return cleanReply(`${prefix}would you like to connect Gmail for this demo, or skip it?`)
   }
