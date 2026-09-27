@@ -177,11 +177,15 @@ export function taskFirstStep(task: string): { title: string; detail: string } {
 
 export function isRefusal(message: string): boolean {
   const normalized = message.trim().toLowerCase().replace(/[.!?,]+$/, '').trim()
-  return /^(?:no|nope|nah|skip|skip it|skip this|not now|no thanks|no thank you|don't want to|dont want to|pass|later|never mind)$/i.test(normalized) ||
-    /^(?:no|nope|nah|skip)\s+(?:thanks|thank you|for now|pls|please)$/i.test(normalized)
+  return (
+    /^(?:no|nope|nah|skip|skip it|skip this|skip that|not now|no thanks|no thank you|don't want to|dont want to|pass|later|never mind|maybe later)$/i.test(normalized) ||
+    /^(?:no|nope|nah|skip)\s+(?:thanks|thank you|for now|pls|please)$/i.test(normalized) ||
+    /\b(?:skip|no|don'?t\s+want|pass\s+on)\s+(?:to\s+)?(?:gmail|google|inbox|email|account|name|task)\b/i.test(normalized) ||
+    /\b(?:no\s+thanks\s*,?\s*)?skip\s+(?:gmail|google|it|this|that)?(?:\s+for\s+now)?\b/i.test(normalized)
+  )
 }
 
-const NON_NAME_WORDS = new Set([
+export const NON_NAME_WORDS = new Set([
   'kk', 'k', 'ok', 'okay', 'sure', 'yes', 'yeah', 'yep', 'yup', 'nah', 'nope', 'no',
   'cool', 'fine', 'right', 'alright', 'good', 'great', 'nothing', 'none', 'never',
   'wait', 'huh', 'what', 'whats', 'who', 'whos', 'where', 'wheres', 'when', 'whens',
@@ -191,8 +195,11 @@ const NON_NAME_WORDS = new Set([
   'it', 'its', 'we', 'us', 'our', 'they', 'them', 'their', 'this', 'that', 'these', 'those',
   'the', 'a', 'an', 'and', 'or', 'but', 'if', 'so', 'to', 'of', 'for', 'in', 'on', 'at', 'by', 'with', 'from',
   'lol', 'lmao', 'haha', 'brb', 'idk', 'idc', 'omg', 'np', 'ty', 'thx', 'yo', 'hi', 'hey', 'hello', 'sup',
-  'flight', 'inbox', 'email', 'gmail', 'persona', 'demo', 'help', 'name', 'clear', 'clean', 'delete'
+  'flight', 'inbox', 'email', 'gmail', 'persona', 'demo', 'help', 'name', 'clear', 'clean', 'delete',
+  'talking', 'speaking'
 ])
+
+export const NAME_INTRO_REGEX = /(?:(?:you(?:'re|re|\s+are)\s+)?(?:talking\s+to|speaking\s+(?:to|with))|my\s+name\s*(?:is|'s)|name\s*(?:is|'s)|i\s*am|i'm|im|it\s*is|it's|its|this\s+is|call\s+me(?!\s+(?:on|later|back|at|if|when|up|tomorrow))|actually\s+(?:it\s*is|it's|its|my\s+name\s+is)?)\s+([a-zA-Z][a-zA-Z' -]{0,46})/i
 
 export function parseCandidates(message: string): { userName?: string; gmail?: string; task?: string } {
   const safeMessage = message.slice(0, 1000)
@@ -231,10 +238,13 @@ export function parseCandidates(message: string): { userName?: string; gmail?: s
   const isNegativeCall = /(?:can't|cannot|don't|dont|won't|wont|not)\s+(?:call me|call)\b/i.test(normalized)
 
   if (!isNegativeCall) {
-    const nameIntroMatch = normalized.match(/(?:my name is|i am|i'm|im|it's|its|this is|call me(?!\s+(?:on|later|back|at|if|when|up|tomorrow))|name is|actually it's|actually its)\s+([a-zA-Z][a-zA-Z' -]{0,46})/i)
+    const nameIntroMatch = normalized.match(NAME_INTRO_REGEX)
     if (nameIntroMatch) {
       nameRawMatch = nameIntroMatch[0]
-      const rawName = nameIntroMatch[1].split(/(?:,|\. | and |, and | at |@| can | please | help | book | organize | schedule | i need)/i)[0].trim()
+      const rawName = nameIntroMatch[1]
+        .split(/(?:,|\. | and |, and | at |@| can | please | help | book | organize | schedule | i need)/i)[0]
+        .replace(/[.,!?;:]+$/, '')
+        .trim()
       const cleanWord = rawName.toLowerCase().replace(/[^a-z]/g, '')
       if (rawName.length >= 2 && !NON_NAME_WORDS.has(cleanWord)) {
         const clean = sanitizeName(rawName)
@@ -243,9 +253,9 @@ export function parseCandidates(message: string): { userName?: string; gmail?: s
     }
   }
 
-  // Handle "Amirlan here" pattern
+  // Handle "Amirlan here" or "Amirlan speaking" pattern
   if (!nameCandidate && !isNegativeCall) {
-    const hereMatch = normalized.match(/^([a-zA-Z][a-zA-Z' -]{1,30})\s+here[.!?]*$/i)
+    const hereMatch = normalized.match(/^([a-zA-Z][a-zA-Z' -]{1,30})\s+(?:here|speaking)[.!?]*$/i)
     if (hereMatch && !/^(?:i am|i'm|it's|its)/i.test(hereMatch[1])) {
       const cleanWord = hereMatch[1].toLowerCase().replace(/[^a-z]/g, '')
       if (!NON_NAME_WORDS.has(cleanWord)) {
@@ -281,13 +291,14 @@ export function parseCandidates(message: string): { userName?: string; gmail?: s
     if (!/(?:call me on|hang up|talk later)/i.test(raw)) {
       taskCandidate = sanitizeTask(raw)
     }
-  } else if (emailRawMatch) {
+  } else if (emailRawMatch || nameRawMatch) {
     // Single breath candidate: extract remainder after stripping email and name
-    let remainder = normalized.replace(emailRawMatch, '')
+    let remainder = normalized
+    if (emailRawMatch) remainder = remainder.replace(emailRawMatch, '')
     if (nameRawMatch) remainder = remainder.replace(nameRawMatch, '')
     remainder = remainder.replace(/^[\s,.;:-]+|[\s,.;:-]+$/g, '').replace(/^(?:and|also|plus|then)\s+/i, '').trim()
     
-    if (remainder.length >= 6 && !COMMON_FILLERS.test(remainder)) {
+    if (remainder.length >= 4 && !COMMON_FILLERS.test(remainder)) {
       taskCandidate = sanitizeTask(remainder)
     }
   } else {

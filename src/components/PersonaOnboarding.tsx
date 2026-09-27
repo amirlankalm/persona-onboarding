@@ -16,6 +16,7 @@ import {
   getNextQuestion,
   isGmailAddress,
   isRefusal,
+  NAME_INTRO_REGEX,
   ONBOARDING_STORAGE_KEY,
   onboardingReducer,
   parseCandidates,
@@ -406,7 +407,7 @@ export function PersonaOnboarding() {
       return
     }
 
-    const hasExplicitNameIntro = /(?:my name is|i am|i'm|im|call me|actually (?:it's|my name is))\s+[a-zA-Z]/i.test(message)
+    const hasExplicitNameIntro = NAME_INTRO_REGEX.test(message)
     const isDenyingName = /\b(?:no\s+)?(?:i'?m not|im not|not|that'?s not my name)\b/i.test(message)
     if (isDenyingName && !hasExplicitNameIntro) {
       dispatch({ type: 'set-user-name', value: '', status: 'empty' })
@@ -438,7 +439,7 @@ export function PersonaOnboarding() {
     applyCandidates(message)
 
     const candidates = parseCandidates(message)
-    const hasExplicitNameIntro = /(?:my name is|i am|i'm|im|call me|actually (?:it's|my name is))\s+[a-zA-Z]/i.test(message)
+    const hasExplicitNameIntro = NAME_INTRO_REGEX.test(message)
     const isDenyingName = /\b(?:no\s+)?(?:i'?m not|im not|not|that'?s not my name)\b/i.test(message)
 
     let effectiveUserName: string | undefined = undefined

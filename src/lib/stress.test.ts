@@ -183,6 +183,44 @@ describe('Persona Crash & Stress Test Suite', () => {
       }
     })
 
+    it('remembers user name across typos and restores it from transcript if omitted from state', async () => {
+      // 1. When knownUserName is provided, handles "whtas my name btw?" typo correctly
+      const res1 = await fetch(textEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: 'whtas my name btw?',
+          agentName: 'Persona',
+          missing: ['gmail'],
+          knownUserName: 'John'
+        })
+      })
+      expect(res1.status).toBe(200)
+      const data1 = (await res1.json()) as { reply: string }
+      expect(data1.reply.toLowerCase()).toContain('john')
+      expect(data1.reply.toLowerCase()).not.toContain('what should i call you')
+
+      // 2. When knownUserName was missing from request payload, but present in transcript
+      const res2 = await fetch(textEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: 'u dont know my name',
+          agentName: 'Persona',
+          missing: ['userName', 'gmail'],
+          transcript: [
+            { source: 'agent', text: "who am i speaking with?" },
+            { source: 'user', text: "Talking to John." },
+            { source: 'agent', text: "nice to meet you, John." }
+          ]
+        })
+      })
+      expect(res2.status).toBe(200)
+      const data2 = (await res2.json()) as { reply: string }
+      expect(data2.reply.toLowerCase()).toContain('john')
+      expect(data2.reply.toLowerCase()).not.toContain('what should i call you')
+    })
+
     it('prevents replay attacks on /api/speko/tools webhook (> 5m old timestamps)', async () => {
       const staleTimestamp = (Math.floor(Date.now() / 1000) - 600).toString() // 10 minutes ago
       const res = await fetch('http://localhost:3001/api/speko/tools', {

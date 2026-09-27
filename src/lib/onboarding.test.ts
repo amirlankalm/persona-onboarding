@@ -242,5 +242,21 @@ describe('Persona onboarding 12 acceptance test cases', () => {
     expect(state.gmail.address).toBe('amir@gmail.com')
     expect(state.gmail.status).toBe('address_provided')
   })
+
+  it('(16) parses conversational spoken phone/intro phrases into clean user names', () => {
+    expect(parseCandidates('Talking to John.').userName).toBe('John')
+    expect(parseCandidates('talking to John').userName).toBe('John')
+    expect(parseCandidates("You're speaking with Sarah").userName).toBe('Sarah')
+    expect(parseCandidates('You are talking to Alex.').userName).toBe('Alex')
+    expect(parseCandidates('John speaking').userName).toBe('John')
+    expect(parseCandidates('This is David.').userName).toBe('David')
+    expect(parseCandidates("It's John.").userName).toBe('John')
+    expect(parseCandidates('My name is John.').userName).toBe('John')
+    
+    // Multi-candidate with "talking to" intro
+    const multi = parseCandidates('Talking to John, sort out my email.')
+    expect(multi.userName).toBe('John')
+    expect(multi.task).toBe('sort out my email')
+  })
 })
 

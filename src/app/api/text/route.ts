@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { parseCandidates, isRefusal } from '@/lib/onboarding'
+import { parseCandidates, isRefusal, NON_NAME_WORDS } from '@/lib/onboarding'
 
 const requestSchema = z.object({
   message: z.string().trim().min(1).max(500),
@@ -292,6 +292,39 @@ async function callAnthropic(
   return cleanReply(text)
 }
 
+function extractNameFromTranscript(
+  transcript: Array<{ source: 'user' | 'agent'; text: string }>,
+  agentName: string
+): string | undefined {
+  for (let i = transcript.length - 1; i >= 0; i--) {
+    const item = transcript[i]
+    if (item.source === 'user') {
+      const parsed = parseCandidates(item.text)
+      if (parsed.userName) return parsed.userName
+    }
+  }
+
+  for (let i = transcript.length - 1; i >= 0; i--) {
+    const item = transcript[i]
+    if (item.source === 'agent') {
+      const match = item.text.match(/(?:nice to meet you|good to meet you|got it|hey|hi|hello)\s*,?\s+([A-Z][a-zA-Z' -]{1,30})/i)
+      if (match) {
+        const potentialName = match[1].replace(/[.,!?;:]+$/, '').trim()
+        const clean = potentialName.toLowerCase().replace(/[^a-z]/g, '')
+        if (
+          potentialName.toLowerCase() !== agentName.toLowerCase() &&
+          !NON_NAME_WORDS.has(clean) &&
+          clean.length >= 2
+        ) {
+          return potentialName
+        }
+      }
+    }
+  }
+
+  return undefined
+}
+
 /**
  * Intelligent, context-aware fallback engine when external LLMs are unavailable or fail.
  * Reconciles transcript history (voice + text turns), extracts candidates, and strictly follows rules.
@@ -317,12 +350,23 @@ function intelligentFallback({
   const lower = trimmed.toLowerCase()
   const isAllLower = trimmed.length > 1 && trimmed === lower && !/[A-Z]/.test(trimmed)
 
-  // 1. User asks what their name is ("whats my name", "do you know my name", "who am i")
-  if (/\b(?:what(?:'s|s| is) my name|who am i|do you know my name|what do you call me)\b/i.test(lower)) {
+  // 1. User asks what their name is ("whats my name", "do you know my name", "who am i", "whtas my name btw")
+  if (
+    /\b(?:what(?:'s|s| is)|whtas|whats|wat|who|tell me|remember|do you know|u know)\b.*\b(?:my name|who i am|who am i|call me)\b/i.test(lower) ||
+    /\b(?:my name\s*(?:btw|again)?)\b/i.test(lower)
+  ) {
     if (knownUserName) {
       return cleanReply(`your name is ${knownUserName}.`)
     }
     return cleanReply("i don't have your name yet! what should i call you?")
+  }
+
+  // 1b. User says "u dont know my name" or "you don't know my name"
+  if (/\b(?:u|you)\s*(?:don'?t|dont|do not)\s*(?:even\s*)?know\s*my\s*name\b/i.test(lower)) {
+    if (knownUserName) {
+      return cleanReply(`i do know your name, ${knownUserName}! what can i help you with?`)
+    }
+    return cleanReply("you got me, i don't have it yet! what should i call you?")
   }
 
   // 2. User denies or corrects their name ("no im not kk", "that's not my name", "im not [x]")
@@ -484,7 +528,10 @@ export async function POST(request: Request) {
   const { message, agentName, missing, knownUserName, knownTask, gmailStatus, transcript = [] } = parsed.data
   const userMessages = transcript.filter(t => t.source === 'user').map(t => t.text)
 
-  const systemPrompt = buildSystemPrompt(agentName, missing, knownUserName, knownTask, gmailStatus, userMessages)
+  const resolvedUserName = knownUserName || extractNameFromTranscript(transcript, agentName)
+  const resolvedMissing = missing.filter(s => s !== 'userName' || !resolvedUserName)
+
+  const systemPrompt = buildSystemPrompt(agentName, resolvedMissing, resolvedUserName, knownTask, gmailStatus, userMessages)
 
   // Try configured LLM providers in priority order
   if (process.env.GROQ_API_KEY) {
@@ -528,8 +575,8 @@ export async function POST(request: Request) {
   const reply = intelligentFallback({
     message,
     agentName,
-    missing,
-    knownUserName,
+    missing: resolvedMissing,
+    knownUserName: resolvedUserName,
     knownTask,
     gmailStatus,
     transcript
