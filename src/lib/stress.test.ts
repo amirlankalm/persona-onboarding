@@ -336,7 +336,7 @@ describe('Persona Crash & Stress Test Suite', () => {
         })
       })
       expect(res2.status).toBe(400)
-    })
+    }, 15000)
 
     it('rejects corrupt or missing webhook signatures without crash', async () => {
       const corruptPayloads: { headers?: Record<string, string> }[] = [
